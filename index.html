@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1d4f91">
+<meta name="description" content="Run Americano and Mexicano pickleball tournaments. Data stays on your device.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pickleball">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  /* Keep content clear of the notch and home bar when installed. */
+  .wrap { padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px)); }
+  .topbar-inner { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .topbar { top: 0; padding-top: env(safe-area-inset-top, 0px); }
+</style>
+<title>Pickleball Tournament</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+  /* Layout: one narrow column (phone first). Sticky header with the settings gear,
+     setup panel, then the current round as stacked court cards, then standings. */
+  :root {
+    --bg: #edf1f5;
+    --surface: #ffffff;
+    --surface-2: #f3f6f9;
+    --line: #d3dbe4;
+    --fg: #14202e;
+    --muted: #5a6a7c;
+    --accent: #1d4f91;
+    --accent-fg: #ffffff;
+    --accent-soft: #dfe9f6;
+    --ball: #d9ea3f;
+    --ball-fg: #2b3200;
+    --danger: #b3261e;
+    --danger-soft: #fbe4e2;
+    --toast-bg: #14202e;
+    --toast-fg: #f4f7fa;
+    --toast-action: #d9ea3f;
+    --shadow: 0 1px 2px rgba(20, 32, 46, .06), 0 4px 16px rgba(20, 32, 46, .06);
+    --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1520; --surface: #152030; --surface-2: #1b2839; --line: #2a3a4e;
+      --fg: #e6edf5; --muted: #92a3b7; --accent: #6aa5ec; --accent-fg: #071321; --accent-soft: #1d3250;
+      --ball: #d9ea3f; --ball-fg: #2b3200; --danger: #ff8f86; --danger-soft: #3a1d1c;
+      --toast-bg: #e6edf5; --toast-fg: #0d1520; --toast-action: #1d4f91;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1520; --surface: #152030; --surface-2: #1b2839; --line: #2a3a4e;
+    --fg: #e6edf5; --muted: #92a3b7; --accent: #6aa5ec; --accent-fg: #071321; --accent-soft: #1d3250;
+    --ball: #d9ea3f; --ball-fg: #2b3200; --danger: #ff8f86; --danger-soft: #3a1d1c;
+    --toast-bg: #e6edf5; --toast-fg: #0d1520; --toast-action: #1d4f91;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.4;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.no-scroll { overflow: hidden; }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; touch-action: manipulation; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  .wrap { max-width: 640px; margin: 0 auto; padding-inline: 16px; padding-block: 0 120px; }
+
+  /* Header */
+  .topbar {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: 640px; margin: 0 auto; padding: 10px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand-ball {
+    width: 26px; height: 26px; border-radius: 50%; flex: none;
+    background:
+      radial-gradient(circle at 30% 32%, var(--ball-fg) 0 1.6px, transparent 2.2px),
+      radial-gradient(circle at 66% 28%, var(--ball-fg) 0 1.6px, transparent 2.2px),
+      radial-gradient(circle at 50% 56%, var(--ball-fg) 0 1.6px, transparent 2.2px),
+      radial-gradient(circle at 26% 70%, var(--ball-fg) 0 1.6px, transparent 2.2px),
+      radial-gradient(circle at 74% 70%, var(--ball-fg) 0 1.6px, transparent 2.2px),
+      var(--ball);
+    opacity: .95;
+  }
+  h1 {
+    margin: 0; font-family: var(--font-display); font-weight: 700;
+    font-size: 1.6rem; letter-spacing: .01em; text-transform: uppercase; line-height: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .icon-btn {
+    width: 44px; height: 44px; flex: none; display: grid; place-items: center;
+    border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  }
+  .icon-btn:hover { color: var(--fg); }
+  .icon-btn svg { width: 22px; height: 22px; }
+
+  .note {
+    margin: 12px 0 0; padding: 10px 12px; border-radius: 10px;
+    background: var(--danger-soft); color: var(--fg); font-size: .9rem;
+  }
+
+  /* Panels */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    margin-top: 14px;
+  }
+  .panel-head {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 14px; background: none; border: 0; text-align: left;
+  }
+  .panel-title {
+    font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .panel-sub { color: var(--muted); font-size: .85rem; }
+  .chev { width: 18px; height: 18px; color: var(--muted); transition: transform .15s; flex: none; }
+  .panel-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  .panel-body { padding: 0 14px 14px; display: grid; gap: 10px; }
+
+  .label {
+    font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+  }
+  .seg {
+    display: grid; grid-template-columns: 1fr 1fr; padding: 3px; gap: 3px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .seg button {
+    border: 0; background: transparent; padding: 9px 10px; border-radius: 8px; font-weight: 600; color: var(--muted);
+  }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+  .hint { margin: 0; font-size: .85rem; color: var(--muted); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--surface-2); color: var(--fg);
+    border-radius: 999px; padding: 8px 14px; min-height: 40px; font-size: .95rem;
+  }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .chip.pending { background: var(--ball); border-color: var(--ball); color: var(--ball-fg); font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .link-btn { border: 0; background: none; color: var(--accent); font-weight: 600; padding: 6px 4px; }
+
+  .pair {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px;
+    background: var(--ball); color: var(--ball-fg); border-radius: 999px; font-weight: 600; font-size: .95rem;
+  }
+  .pair.inactive { opacity: .5; }
+  .pair button {
+    width: 28px; height: 28px; border-radius: 50%; border: 0; display: grid; place-items: center;
+    background: rgba(0, 0, 0, .12); color: var(--ball-fg);
+  }
+  .pair svg, .member-list svg { width: 14px; height: 14px; }
+
+  .btn {
+    border: 0; border-radius: 10px; padding: 14px 16px; font-weight: 700; font-size: 1rem;
+    background: var(--accent); color: var(--accent-fg); min-height: 48px;
+  }
+  .btn.secondary { background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); }
+  .btn.warn { background: var(--ball); color: var(--ball-fg); }
+  .btn.danger { background: var(--danger); color: var(--surface); }
+  .btn.block { width: 100%; }
+  .start-row { margin-top: 14px; }
+
+  /* Tabs */
+  .tabs { margin-top: 22px; }
+  .tabs .seg button { font-size: 1rem; padding: 10px; }
+
+  .round-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 18px 2px 10px; }
+  h2 {
+    margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 2rem;
+    text-transform: uppercase; line-height: 1; text-wrap: balance;
+  }
+  .pill {
+    font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+  }
+  .banner {
+    display: grid; gap: 10px; padding: 12px 14px; margin-bottom: 12px;
+    border-radius: var(--radius); background: var(--ball); color: var(--ball-fg); font-weight: 600;
+  }
+
+  /* Court cards */
+  .courts { display: grid; gap: 12px; }
+  .court {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; box-shadow: var(--shadow);
+  }
+  .court.error { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger); }
+  .court-label {
+    font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    margin-bottom: 6px; display: flex; justify-content: space-between;
+  }
+  .side { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 6px 0; }
+  .side + .side { border-top: 1px dashed var(--line); }
+  .names { min-width: 0; font-weight: 600; font-size: 1.05rem; overflow-wrap: anywhere; }
+  .names small { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .score {
+    width: 4.6rem; height: 3.6rem; text-align: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 2rem; font-variant-numeric: tabular-nums;
+    border: 2px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--fg);
+    padding: 0; -webkit-appearance: none; appearance: none;
+  }
+  .score:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+  .court-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .court-foot .btn { padding: 8px 16px; min-height: 40px; font-size: .9rem; }
+
+  .bench { margin: 14px 2px 0; color: var(--muted); }
+  .bench b { color: var(--fg); }
+  .fair { margin: 4px 2px 14px; font-size: .85rem; color: var(--muted); }
+
+  .empty {
+    margin-top: 22px; padding: 22px 18px; text-align: center; color: var(--muted);
+    border: 1px dashed var(--line); border-radius: var(--radius);
+  }
+  .empty strong { display: block; color: var(--fg); font-size: 1.05rem; margin-bottom: 4px; }
+
+  .results-round + .results-round { margin-top: 22px; }
+  .results-round h3 {
+    margin: 0 2px 8px; font-family: var(--font-display); font-size: 1.3rem; text-transform: uppercase;
+  }
+
+  /* Standings */
+  .standings { margin-top: 28px; }
+  .standings .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 8px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); background: var(--surface-2); }
+  td.name, th.name { text-align: left; white-space: normal; }
+  tr:last-child td { border-bottom: 0; }
+  td.rank { color: var(--muted); width: 2.2em; }
+  td.key { font-weight: 700; }
+  .form { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; letter-spacing: .05em; }
+  .form .w { color: var(--accent); font-weight: 700; }
+  .form .l { color: var(--muted); }
+
+  /* Overlays */
+  .overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+  .backdrop { position: absolute; inset: 0; background: rgba(8, 14, 22, .5); cursor: pointer; }
+  .sheet {
+    position: relative; width: 100%; max-width: 560px; max-height: 88vh; max-height: 88dvh;
+    display: flex; flex-direction: column;
+    background: var(--surface); color: var(--fg);
+    border-radius: 18px 18px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (min-width: 600px) {
+    .overlay { align-items: center; }
+    .sheet { border-radius: 18px; }
+  }
+  .sheet-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 14px 16px; border-bottom: 1px solid var(--line);
+  }
+  .sheet-head h2 { font-size: 1.5rem; }
+  .sheet-body { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; display: grid; gap: 22px; }
+  .sheet-section { display: grid; gap: 10px; }
+  .sheet-section h3 {
+    margin: 0; display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-display); font-size: 1.2rem; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .count { font-family: var(--font-body); font-size: .8rem; font-weight: 600; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 2px 8px; }
+  .add-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .add-form input {
+    min-width: 0; font-size: 16px; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--surface-2);
+  }
+  .add-form input:focus { border-color: var(--accent); outline: none; background: var(--surface); }
+  .field-error { margin: 0; color: var(--danger); font-size: .9rem; font-weight: 600; }
+  .member-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); }
+  .member-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 4px 4px 14px; min-height: 48px; }
+  .member-list li + li { border-top: 1px solid var(--line); }
+  .member-list span { min-width: 0; overflow-wrap: anywhere; }
+  .member-list button {
+    width: 40px; height: 40px; flex: none; border-radius: 50%; border: 0; display: grid; place-items: center;
+    background: var(--danger-soft); color: var(--danger);
+  }
+  .member-list li.new { background: var(--accent-soft); }
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn-grid .wide { grid-column: 1 / -1; }
+
+  .dialog {
+    position: relative; width: calc(100% - 32px); max-width: 400px; margin: auto;
+    background: var(--surface); border-radius: 16px; padding: 20px; display: grid; gap: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .3);
+  }
+  .overlay.center { align-items: center; }
+  .dialog h2 { font-size: 1.5rem; }
+  .dialog p { margin: 0; color: var(--muted); }
+
+  .toast {
+    position: fixed; z-index: 80; left: 50%; transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    width: calc(100% - 32px); max-width: 480px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border-radius: 12px; background: var(--toast-bg); color: var(--toast-fg);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .25); font-size: .95rem;
+  }
+  .toast button { border: 0; background: none; color: var(--toast-action); font-weight: 700; padding: 6px 8px; flex: none; }
+
+
+  /* Section title with a PDF button */
+  .section-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 18px 2px 12px; }
+  .mini-btn {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 14px;
+    border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--accent);
+    font-weight: 700; font-size: .9rem;
+  }
+  .mini-btn svg { width: 18px; height: 18px; }
+  .check-list { display: grid; gap: 8px; }
+  .check-row {
+    display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start;
+    padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); cursor: pointer;
+  }
+  .check-row input { width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--accent); }
+  .check-row small { display: block; color: var(--muted); font-size: .85rem; margin-top: 2px; }
+  .btn:disabled { opacity: .6; cursor: progress; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-ball" aria-hidden="true"></span><h1>Pickleball Tournament</h1></div>
+    <button type="button" class="icon-btn" id="settingsBtn" data-action="open-settings" aria-label="Settings: club members and backup">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="wrap">
+  <p class="note" id="storageNote" hidden>This browser isn't saving data (private browsing or blocked site data). Your tournament will be lost if you close the page. Open settings and use Export to keep a copy.</p>
+  <div id="setup"></div>
+  <div id="main"></div>
+  <div id="standings"></div>
+</div>
+
+<div id="overlayRoot"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastMsg"></span><button type="button" id="toastAction" hidden></button></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Config ───────────────────────────────────────────────────────────────
+  var STORE_KEY = 'pickleball-tournament-v1';
+  // Only used once, on the very first launch, to fill the member list.
+  var SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT1b8pL4ZcWlC8X5nqeuTcWbUqcOz1VfJQsKtz2f3x7N2dmcdl2vYRIMGp5szX2SZutlaTM_GX5jrSE/pub?gid=0&single=true&output=csv';
+  var DEFAULT_MEMBERS = ['Alex', 'Blake', 'Casey', 'Drew', 'Elliot', 'Flynn', 'Gray', 'Harper', 'Jordan', 'Kai', 'Micky', 'Michael', 'Junior', 'Frank', 'Sofie'];
+
+  var ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  var ICON_PDF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9 15l3 3 3-3"/></svg>';
+  var ICON_CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+
+  // ── Small helpers ────────────────────────────────────────────────────────
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function cleanName(s) { return String(s).replace(/\s+/g, ' ').trim(); }
+  function sameName(a, b) { return a.toLowerCase() === b.toLowerCase(); }
+  function sortNames(list) {
+    return list.slice().sort(function (a, b) { return a.localeCompare(b, undefined, { sensitivity: 'base' }); });
+  }
+  function contains(list, x) { return list.indexOf(x) !== -1; }
+  function shuffle(array) {
+    var a = array.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function flatPairs(pairs) { var out = []; pairs.forEach(function (p) { out.push(p[0], p[1]); }); return out; }
+  function joinTeam(team) { return team.join(' & '); }
+
+  // ── Storage ──────────────────────────────────────────────────────────────
+  var storageOK = true;
+  function readStore() {
+    try {
+      var raw = window.localStorage.getItem(STORE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { storageOK = false; return null; }
+  }
+  function save() {
+    try {
+      window.localStorage.setItem(STORE_KEY, JSON.stringify(S));
+      storageOK = true;
+    } catch (e) { storageOK = false; }
+    $('storageNote').hidden = storageOK;
+  }
+  function probeStorage() {
+    try {
+      window.localStorage.setItem('__pb_probe', '1');
+      window.localStorage.removeItem('__pb_probe');
+    } catch (e) { storageOK = false; }
+  }
+
+  function fresh(members) {
+    return {
+      v: 1,
+      members: sortNames(members),
+      selected: members.slice(),
+      locked: [],
+      mode: 'americano',
+      standView: 'individual',
+      rankBy: 'points',
+      tab: 'round',
+      membersEdited: false,
+      t: null
+    };
+  }
+
+  // Accepts anything (stored data, an imported file) and returns a safe state or null.
+  function normalize(o) {
+    if (!o || typeof o !== 'object' || !Array.isArray(o.members)) return null;
+    var members = [];
+    o.members.forEach(function (m) {
+      if (typeof m !== 'string') return;
+      m = cleanName(m);
+      if (m && !members.some(function (x) { return sameName(x, m); })) members.push(m);
+    });
+    members = sortNames(members);
+    var selected = (Array.isArray(o.selected) ? o.selected : members).filter(function (p, i, arr) {
+      return contains(members, p) && arr.indexOf(p) === i;
+    });
+    var used = {}, locked = [];
+    (Array.isArray(o.locked) ? o.locked : []).forEach(function (p) {
+      if (Array.isArray(p) && p.length === 2 && p[0] !== p[1] && contains(members, p[0]) && contains(members, p[1]) && !used[p[0]] && !used[p[1]]) {
+        locked.push([p[0], p[1]]); used[p[0]] = used[p[1]] = true;
+      }
+    });
+    var t = null;
+    if (o.t && Array.isArray(o.t.players) && Array.isArray(o.t.rounds)) {
+      t = {
+        players: o.t.players.filter(function (p) { return typeof p === 'string'; }),
+        rounds: o.t.rounds.filter(function (r) { return r && Array.isArray(r.courts) && Array.isArray(r.bench); }),
+        current: (o.t.current && Array.isArray(o.t.current.courts)) ? o.t.current : null,
+        locksChanged: !!o.t.locksChanged
+      };
+      if (t.current) t.current.courts.forEach(function (c) { if (!Array.isArray(c.draft)) c.draft = ['', '']; });
+    }
+    return {
+      v: 1,
+      members: members,
+      selected: selected,
+      locked: locked,
+      mode: o.mode === 'mexicano' ? 'mexicano' : 'americano',
+      standView: o.standView === 'teams' ? 'teams' : 'individual',
+      rankBy: o.rankBy === 'record' ? 'record' : 'points',
+      tab: o.tab === 'results' ? 'results' : 'round',
+      membersEdited: !!o.membersEdited,
+      t: t
+    };
+  }
+
+  // ── State ────────────────────────────────────────────────────────────────
+  var stored = readStore();
+  var firstRun = !stored;
+  var S = normalize(stored) || fresh(DEFAULT_MEMBERS);
+
+  // UI-only state (not saved)
+  var ui = {
+    lockPending: null,
+    open: { players: null, locks: null },  // null = automatic
+    errorCourt: -1,
+    settingsOpen: false,
+    newMember: null
+  };
+
+  // ── Toast ────────────────────────────────────────────────────────────────
+  var toastTimer = null, toastFn = null;
+  function toast(msg, actionLabel, actionFn) {
+    $('toastMsg').textContent = msg;
+    var btn = $('toastAction');
+    toastFn = actionFn || null;
+    btn.hidden = !actionFn;
+    btn.textContent = actionLabel || '';
+    $('toast').hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { $('toast').hidden = true; toastFn = null; }, actionFn ? 6000 : 4000);
+  }
+  $('toastAction').addEventListener('click', function () {
+    var fn = toastFn;
+    $('toast').hidden = true; toastFn = null;
+    if (fn) fn();
+  });
+
+  // Any unexpected error becomes visible instead of "nothing happens".
+  window.addEventListener('error', function (e) {
+    toast('Something went wrong: ' + (e && e.message ? e.message : 'unknown error'));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e && e.reason;
+    toast('Something went wrong: ' + (r && r.message ? r.message : String(r)));
+  });
+
+  // ── Statistics (always recomputed from the rounds, so edits stay consistent) ──
+  function stats() {
+    var st = {};
+    var t = S.t;
+    if (!t) return st;
+    t.players.forEach(function (p) { st[p] = { points: 0, wins: 0, losses: 0, bench: 0, form: [] }; });
+    function ensure(p) { if (!st[p]) st[p] = { points: 0, wins: 0, losses: 0, bench: 0, form: [] }; return st[p]; }
+    t.rounds.forEach(function (r) {
+      r.bench.forEach(function (p) { ensure(p).bench++; });
+      r.courts.forEach(function (c) {
+        var winner = c.score[0] > c.score[1] ? 0 : 1;
+        c.teams.forEach(function (team, ti) {
+          team.forEach(function (p) {
+            var s = ensure(p);
+            s.points += c.score[ti];
+            if (ti === winner) { s.wins++; s.form.push('W'); } else { s.losses++; s.form.push('L'); }
+          });
+        });
+      });
+    });
+    if (t.current) t.current.bench.forEach(function (p) { ensure(p).bench++; });
+    return st;
+  }
+
+  function parseScore(v) {
+    v = String(v == null ? '' : v).trim();
+    return /^\d+$/.test(v) ? parseInt(v, 10) : NaN;
+  }
+  function validateScore(s1, s2) {
+    if (isNaN(s1) || isNaN(s2)) return 'enter both scores';
+    if (s1 < 0 || s2 < 0) return 'scores cannot be negative';
+    if (Math.abs(s1 - s2) < 2) return 'the winner must win by 2';
+    return null;
+  }
+
+  // ── Round generation (same rules as before) ─────────────────────────────
+  function activeLockedPairs(players) {
+    return S.locked.filter(function (p) { return contains(players, p[0]) && contains(players, p[1]); });
+  }
+
+  function makeRound() {
+    var t = S.t;
+    var st = stats();
+    var bc = function (p) { return st[p] ? st[p].bench : 0; };
+    var benchSize = t.players.length % 4;
+
+    var activeLocked = activeLockedPairs(t.players);
+    var lockedFlat = flatPairs(activeLocked);
+    var free = t.players.filter(function (p) { return !contains(lockedFlat, p); });
+
+    // Shuffle first, then a stable sort: fewest bench turns first, random among ties.
+    var sortedFree = shuffle(free).sort(function (a, b) { return bc(a) - bc(b); });
+    var sortedPairs = shuffle(activeLocked).sort(function (a, b) {
+      return (bc(a[0]) + bc(a[1])) - (bc(b[0]) + bc(b[1]));
+    });
+
+    var bench = [], slotsLeft = benchSize, fi = 0, pi = 0;
+    while (slotsLeft > 0) {
+      var canFree = fi < sortedFree.length;
+      var canPair = pi < sortedPairs.length && slotsLeft >= 2;
+      if (!canFree && !canPair) {
+        toast('Cannot fill the bench. Unlock a team or change the number of players.');
+        return false;
+      }
+      if (slotsLeft === 1) {
+        if (!canFree) {
+          toast('One player must sit out, but everyone left is in a locked team. Unlock a team to continue.');
+          return false;
+        }
+        bench.push(sortedFree[fi++]); slotsLeft--;
+      } else if (canFree && canPair) {
+        var freeScore = bc(sortedFree[fi]);
+        var pairScore = (bc(sortedPairs[pi][0]) + bc(sortedPairs[pi][1])) / 2;
+        if (freeScore <= pairScore) { bench.push(sortedFree[fi++]); slotsLeft--; }
+        else { bench.push(sortedPairs[pi][0], sortedPairs[pi][1]); pi++; slotsLeft -= 2; }
+      } else if (canFree) {
+        bench.push(sortedFree[fi++]); slotsLeft--;
+      } else {
+        bench.push(sortedPairs[pi][0], sortedPairs[pi][1]); pi++; slotsLeft -= 2;
+      }
+    }
+
+    var activeFree = free.filter(function (p) { return !contains(bench, p); });
+    var teams = activeLocked.filter(function (p) { return !contains(bench, p[0]); }).map(function (p) { return p.slice(); });
+    var shuffledFree = shuffle(activeFree);
+    for (var i = 0; i + 1 < shuffledFree.length; i += 2) teams.push([shuffledFree[i], shuffledFree[i + 1]]);
+
+    var pts = function (p) { return st[p] ? st[p].points : 0; };
+    if (S.mode === 'mexicano') {
+      teams = shuffle(teams).sort(function (a, b) { return (pts(b[0]) + pts(b[1])) - (pts(a[0]) + pts(a[1])); });
+    } else {
+      teams = shuffle(teams);
+    }
+    var courts = [];
+    for (var k = 0; k + 1 < teams.length; k += 2) courts.push({ teams: [teams[k], teams[k + 1]], draft: ['', ''] });
+
+    t.current = { n: t.rounds.length + 1, courts: courts, bench: bench, mode: S.mode };
+    t.locksChanged = false;
+    ui.errorCourt = -1;
+    return true;
+  }
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  function selectedPlayers() { return S.selected.filter(function (p) { return contains(S.members, p); }); }
+
+  function hasProgress() {
+    if (!S.t) return false;
+    if (S.t.rounds.length) return true;
+    return !!(S.t.current && S.t.current.courts.some(function (c) { return c.draft[0] !== '' || c.draft[1] !== ''; }));
+  }
+
+  function startTournament() {
+    var players = selectedPlayers();
+    if (players.length < 4) {
+      ui.open.players = true;
+      render();
+      toast('Select at least 4 players to start. Right now ' + players.length + ' ' + (players.length === 1 ? 'is' : 'are') + ' selected.');
+      return;
+    }
+    var go = function () {
+      var prev = S.t;
+      S.t = { players: players.slice(), rounds: [], current: null, locksChanged: false };
+      if (!makeRound()) { S.t = prev; render(); return; }
+      S.tab = 'round';
+      ui.open.players = null; ui.open.locks = null; ui.lockPending = null;
+      save(); render();
+      toast('Tournament started with ' + players.length + ' players.');
+      scrollToMain();
+    };
+    if (hasProgress()) {
+      confirmDialog('Start a new tournament?', 'This clears all rounds and scores from the current tournament.', 'Start new', go);
+    } else {
+      go();
+    }
+  }
+
+  function scrollToMain() {
+    var el = $('main');
+    if (!el || !el.scrollIntoView) return;
+    setTimeout(function () {
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      catch (e) { try { el.scrollIntoView(); } catch (e2) { /* ignore */ } }
+    }, 50);
+  }
+
+  function submitRound() {
+    var t = S.t, cur = t && t.current;
+    if (!cur) { toast('There is no round to submit.'); return; }
+    var scores = [];
+    for (var i = 0; i < cur.courts.length; i++) {
+      var c = cur.courts[i];
+      var s1 = parseScore(c.draft[0]), s2 = parseScore(c.draft[1]);
+      var err = validateScore(s1, s2);
+      if (err) {
+        ui.errorCourt = i;
+        renderMain();
+        toast('Court ' + (i + 1) + ': ' + err + '.');
+        var input = document.querySelector('.score[data-court="' + i + '"]');
+        if (input && input.scrollIntoView) { try { input.scrollIntoView({ block: 'center' }); } catch (e) { /* ignore */ } }
+        return;
+      }
+      scores.push([s1, s2]);
+    }
+    t.rounds.push({
+      n: cur.n,
+      mode: cur.mode || S.mode,
+      courts: cur.courts.map(function (c, k) { return { teams: c.teams, score: scores[k] }; }),
+      bench: cur.bench.slice()
+    });
+    var done = cur.n;
+    t.current = null;
+    t.locksChanged = false;
+    makeRound();
+    save(); render();
+    toast('Round ' + done + ' saved.');
+    scrollToMain();
+  }
+
+  function rebuildRound() {
+    if (!S.t) return;
+    S.t.current = null;
+    S.t.locksChanged = false;
+    makeRound();
+    save(); render();
+    if (S.t.current) toast('Round ' + S.t.current.n + ' rebuilt with the new locked teams.');
+  }
+
+  function nextRound() {
+    if (S.t && !S.t.current && makeRound()) { save(); render(); }
+  }
+
+  function saveResult(r, c) {
+    var round = S.t && S.t.rounds[r];
+    if (!round) return;
+    var a = document.querySelector('.res[data-r="' + r + '"][data-c="' + c + '"][data-s="0"]');
+    var b = document.querySelector('.res[data-r="' + r + '"][data-c="' + c + '"][data-s="1"]');
+    var s1 = parseScore(a && a.value), s2 = parseScore(b && b.value);
+    var err = validateScore(s1, s2);
+    if (err) { toast('Round ' + round.n + ', court ' + (c + 1) + ': ' + err + '.'); return; }
+    round.courts[c].score = [s1, s2];
+    save(); render();
+    toast('Round ' + round.n + ', court ' + (c + 1) + ' updated.');
+  }
+
+  function lockPool() { return S.t ? S.t.players : selectedPlayers(); }
+  function markLocksChanged() { if (S.t && S.t.current) S.t.locksChanged = true; }
+
+  function pickLock(p) {
+    if (ui.lockPending === null) ui.lockPending = p;
+    else if (ui.lockPending === p) ui.lockPending = null;
+    else {
+      S.locked.push([ui.lockPending, p]);
+      ui.lockPending = null;
+      markLocksChanged();
+      save();
+    }
+    render();
+  }
+  function unlock(i) {
+    S.locked.splice(i, 1);
+    ui.lockPending = null;
+    markLocksChanged();
+    save(); render();
+  }
+
+  function togglePlayer(name) {
+    if (contains(S.selected, name)) {
+      S.selected = S.selected.filter(function (p) { return p !== name; });
+      if (ui.lockPending === name) ui.lockPending = null;
+    } else {
+      S.selected.push(name);
+    }
+    save(); render();
+  }
+  function selectAll(on) {
+    S.selected = on ? S.members.slice() : [];
+    ui.lockPending = null;
+    save(); render();
+  }
+
+  // ── Club members ─────────────────────────────────────────────────────────
+  function addMember(raw) {
+    var name = cleanName(raw);
+    if (!name) return 'Type a name first.';
+    if (name.length > 40) return 'Names can be at most 40 characters.';
+    var dupe = S.members.filter(function (m) { return sameName(m, name); })[0];
+    if (dupe) return dupe + ' is already a member.';
+    S.members = sortNames(S.members.concat([name]));
+    S.selected.push(name);
+    S.membersEdited = true;
+    ui.newMember = name;
+    save();
+    return null;
+  }
+
+  function removeMember(name) {
+    var before = JSON.stringify({ members: S.members, selected: S.selected, locked: S.locked });
+    var hadActiveLock = S.locked.some(function (p) { return contains(p, name) && S.t && contains(S.t.players, p[0]) && contains(S.t.players, p[1]); });
+    S.members = S.members.filter(function (m) { return m !== name; });
+    S.selected = S.selected.filter(function (m) { return m !== name; });
+    S.locked = S.locked.filter(function (p) { return !contains(p, name); });
+    if (hadActiveLock) markLocksChanged();
+    if (ui.lockPending === name) ui.lockPending = null;
+    S.membersEdited = true;
+    save(); render(); renderMemberList();
+    toast('Removed ' + name + '.', 'Undo', function () {
+      var o = JSON.parse(before);
+      S.members = o.members; S.selected = o.selected; S.locked = o.locked;
+      save(); render(); renderMemberList();
+    });
+  }
+
+  function parseCsvFirstColumn(text) {
+    var names = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      var cell;
+      if (line.charAt(0) === '"') {
+        var m = line.match(/^"((?:[^"]|"")*)"/);
+        cell = m ? m[1].replace(/""/g, '"') : line;
+      } else {
+        cell = line.split(',')[0];
+      }
+      cell = cleanName(cell);
+      if (cell && cell.toLowerCase() !== 'name') names.push(cell);
+    });
+    return names;
+  }
+
+  function fetchSheetNames() {
+    if (typeof fetch !== 'function') return Promise.reject(new Error('fetch unavailable'));
+    var ctrl = ('AbortController' in window) ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 8000);
+    return fetch(SHEET_CSV_URL, ctrl ? { signal: ctrl.signal } : {})
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.text();
+      })
+      .then(function (text) {
+        clearTimeout(timer);
+        var names = parseCsvFirstColumn(text);
+        if (!names.length) throw new Error('No names in the sheet');
+        return names;
+      }, function (err) { clearTimeout(timer); throw err; });
+  }
+
+  // ── Backup ───────────────────────────────────────────────────────────────
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+
+  // Hands a file to the user: the Claude preview's save dialog, the iPhone share sheet
+  // (where "Save to Files" lives), or a normal browser download.
+  function saveFile(blob, fname, label) {
+    var done = function () { toast(label + ' saved as ' + fname + '.'); };
+    if (window.claude && typeof window.claude.use === 'function') {
+      window.claude.use('downloads').then(function (dl) {
+        if (!dl) { browserSave(blob, fname, done); return; }
+        dl.save({ filename: fname, data: blob }).then(done, function (err) {
+          if (err && err.code === 'declined') return;
+          toast("Couldn't save the file here (" + (err && err.code ? err.code : 'unavailable') + ').');
+        });
+      });
+      return;
+    }
+    browserSave(blob, fname, done);
+  }
+  function browserSave(blob, fname, done) {
+    if (isIOS() && navigator.canShare && typeof File === 'function') {
+      try {
+        var file = new File([blob], fname, { type: blob.type });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: fname }).then(done, function (err) {
+            if (!err || err.name !== 'AbortError') anchorDownload(blob, fname, done);
+          });
+          return;
+        }
+      } catch (e) { /* fall through to a normal download */ }
+    }
+    anchorDownload(blob, fname, done);
+  }
+  function anchorDownload(blob, fname, done) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = fname; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    done();
+  }
+
+  function exportData() {
+    var json = JSON.stringify({ app: 'pickleball-tournament', version: 1, exportedAt: new Date().toISOString(), data: S }, null, 2);
+    saveFile(new Blob([json], { type: 'application/json' }), 'pickleball-backup-' + today() + '.json', 'Backup');
+  }
+
+  // ── PDF export ───────────────────────────────────────────────────────────
+  var PDF_LIBS = ['lib/jspdf.umd.min.js', 'lib/jspdf.plugin.autotable.min.js'];
+  var pdfLibsPromise = null;
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src; s.async = false;
+      s.onload = resolve;
+      s.onerror = function () { reject(new Error('Could not load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  function loadPdfLibs() {
+    if (window.jspdf && window.jspdf.jsPDF && (window.autoTable || (window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.autoTable))) return Promise.resolve();
+    if (!pdfLibsPromise) {
+      pdfLibsPromise = PDF_LIBS.reduce(function (p, src) { return p.then(function () { return loadScript(src); }); }, Promise.resolve())
+        .catch(function (err) { pdfLibsPromise = null; throw err; });
+    }
+    return pdfLibsPromise;
+  }
+
+  function standingsRows(view, rankBy) {
+    var t = S.t, st = stats(), rows = [];
+    var blank = { points: 0, wins: 0, losses: 0, bench: 0, form: [] };
+    if (view === 'teams') {
+      activeLockedPairs(t.players).forEach(function (p) { rows.push({ label: joinTeam(p), s: st[p[0]] || blank }); });
+    } else {
+      t.players.forEach(function (p) { rows.push({ label: p, s: st[p] || blank }); });
+    }
+    if (rankBy === 'record') {
+      rows.sort(function (a, b) { return (b.s.wins - a.s.wins) || (a.s.losses - b.s.losses) || (b.s.points - a.s.points); });
+    } else {
+      rows.sort(function (a, b) { return (b.s.points - a.s.points) || (b.s.wins - a.s.wins); });
+    }
+    return rows;
+  }
+
+  function buildPdf(withStandings, withResults, outType) {
+    var t = S.t;
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    var table = function (opts) {
+      if (typeof doc.autoTable === 'function') doc.autoTable(opts);
+      else window.autoTable(doc, opts);
+      return doc.lastAutoTable.finalY;
+    };
+    var M = 40, W = doc.internal.pageSize.getWidth();
+    var BLUE = [29, 79, 145], INK = [20, 32, 46], MUTED = [90, 106, 124], LINE = [211, 219, 228], SOFT = [243, 246, 249];
+    var rec = S.rankBy === 'record';
+    var modes = {};
+    t.rounds.forEach(function (r) { modes[r.mode === 'mexicano' ? 'Mexicano' : 'Americano'] = true; });
+    var modeText = Object.keys(modes).join(' + ') || (S.mode === 'mexicano' ? 'Mexicano' : 'Americano');
+    var dateText = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Header band
+    doc.setFillColor(BLUE[0], BLUE[1], BLUE[2]);
+    doc.rect(0, 0, W, 6, 'F');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.text('Pickleball Tournament', M, 50);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text(dateText + '   |   ' + modeText + '   |   ' + t.players.length + ' players   |   ' +
+      t.rounds.length + (t.rounds.length === 1 ? ' round played' : ' rounds played'), M, 68);
+    var y = 92;
+
+    var base = {
+      margin: { left: M, right: M, bottom: 50 },
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 10, cellPadding: 5, lineColor: LINE, lineWidth: 0.5, textColor: INK },
+      headStyles: { fillColor: SOFT, textColor: MUTED, fontStyle: 'bold', fontSize: 8 },
+      alternateRowStyles: { fillColor: [251, 252, 253] }
+    };
+    function merge(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; for (k in b) o[k] = b[k]; return o; }
+    function heading(text, sub) {
+      if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 50; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(INK[0], INK[1], INK[2]);
+      doc.text(text, M, y);
+      if (sub) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+        doc.text(sub, W - M, y, { align: 'right' });
+      }
+      y += 8;
+    }
+    function standingsTable(view, title) {
+      var rows = standingsRows(view, S.rankBy);
+      if (!rows.length) return;
+      heading(title, 'Ranked by ' + (rec ? 'wins' : 'points'));
+      var cols = rec ? ['W', 'L', 'Pts'] : ['Pts', 'W', 'L'];
+      y = table(merge(base, {
+        startY: y,
+        head: [['#', view === 'teams' ? 'Team' : 'Player'].concat(cols).concat(['Bench', 'Form'])],
+        body: rows.map(function (r, i) {
+          var nums = rec ? [r.s.wins, r.s.losses, r.s.points] : [r.s.points, r.s.wins, r.s.losses];
+          return [i + 1, r.label].concat(nums).concat([r.s.bench, r.s.form.join(' ') || '-']);
+        }),
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 26, textColor: MUTED },
+          2: { halign: 'center', cellWidth: 40, fontStyle: 'bold' },
+          3: { halign: 'center', cellWidth: 36 },
+          4: { halign: 'center', cellWidth: 36 },
+          5: { halign: 'center', cellWidth: 42 },
+          6: { font: 'courier', fontSize: 9 }
+        }
+      })) + 26;
+    }
+
+    if (withStandings) {
+      standingsTable('individual', 'Standings');
+      if (activeLockedPairs(t.players).length) standingsTable('teams', 'Locked teams');
+    }
+
+    if (withResults) {
+      heading('Results', t.current ? 'Round ' + t.current.n + ' is in progress and not included' : '');
+      if (!t.rounds.length) {
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+        doc.text('No rounds have been submitted yet.', M, y + 14);
+        y += 30;
+      } else {
+        var body = [];
+        t.rounds.forEach(function (r) {
+          body.push([{
+            content: 'Round ' + r.n + (r.mode === 'mexicano' ? '  (Mexicano)' : '') +
+              '      Bench: ' + (r.bench.length ? r.bench.join(', ') : 'nobody'),
+            colSpan: 4,
+            styles: { fillColor: [223, 233, 246], fontStyle: 'bold', textColor: INK }
+          }]);
+          r.courts.forEach(function (c, ci) {
+            var win = c.score[0] > c.score[1] ? 0 : 1;
+            body.push([
+              { content: 'Court ' + (ci + 1), styles: { textColor: MUTED } },
+              { content: joinTeam(c.teams[0]), styles: { fontStyle: win === 0 ? 'bold' : 'normal' } },
+              { content: c.score[0] + ' - ' + c.score[1], styles: { halign: 'center', fontStyle: 'bold' } },
+              { content: joinTeam(c.teams[1]), styles: { fontStyle: win === 1 ? 'bold' : 'normal' } }
+            ]);
+          });
+        });
+        y = table(merge(base, {
+          startY: y,
+          head: [['Court', 'Team 1', 'Score', 'Team 2']],
+          body: body,
+          alternateRowStyles: {},
+          columnStyles: { 0: { cellWidth: 52 }, 2: { cellWidth: 60 } }
+        })) + 20;
+      }
+    }
+
+    // Footer on every page
+    var pages = doc.internal.getNumberOfPages();
+    for (var p = 1; p <= pages; p++) {
+      doc.setPage(p);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+      doc.text('Winning team in bold. Generated ' + dateText + '.', M, doc.internal.pageSize.getHeight() - 24);
+      doc.text('Page ' + p + ' of ' + pages, W - M, doc.internal.pageSize.getHeight() - 24, { align: 'right' });
+    }
+    return doc.output(outType || 'blob');
+  }
+
+  function openPdfDialog(preset) {
+    if (!S.t) return;
+    $('overlayRoot').innerHTML =
+      '<div class="overlay center">' +
+        '<div class="backdrop" data-action="close-overlay"></div>' +
+        '<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pdfTitle">' +
+          '<h2 id="pdfTitle">Export PDF</h2>' +
+          '<p>Choose what to include. The file is A4 and ready to print or send.</p>' +
+          '<div class="check-list">' +
+            '<label class="check-row" for="pdfStandings"><input type="checkbox" id="pdfStandings"' + (preset === 'standings' ? ' checked' : '') + '>' +
+              '<span><b>Standings</b><small>Points, wins, losses, bench turns and form for every player' + (activeLockedPairs(S.t.players).length ? ', plus locked teams' : '') + '.</small></span></label>' +
+            '<label class="check-row" for="pdfResults"><input type="checkbox" id="pdfResults"' + (preset === 'results' ? ' checked' : '') + '>' +
+              '<span><b>Results</b><small>Every submitted round: courts, teams, scores and who sat out (' + S.t.rounds.length + (S.t.rounds.length === 1 ? ' round' : ' rounds') + ').</small></span></label>' +
+          '</div>' +
+          '<p class="field-error" id="pdfError" hidden>Tick at least one of the two.</p>' +
+          '<div class="btn-grid"><button type="button" class="btn secondary" data-action="close-overlay">Cancel</button>' +
+          '<button type="button" class="btn" id="pdfGo" data-action="pdf-go">Create PDF</button></div>' +
+        '</div>' +
+      '</div>';
+    document.body.classList.add('no-scroll');
+  }
+
+  function createPdf() {
+    var a = $('pdfStandings').checked, b = $('pdfResults').checked;
+    if (!a && !b) { $('pdfError').hidden = false; return; }
+    var btn = $('pdfGo');
+    btn.disabled = true; btn.textContent = 'Creating…';
+    loadPdfLibs().then(function () {
+      var blob = buildPdf(a, b);
+      closeOverlay();
+      var what = a && b ? 'tournament' : (a ? 'standings' : 'results');
+      saveFile(blob, 'pickleball-' + what + '-' + today() + '.pdf', 'PDF');
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'Create PDF';
+      toast("Couldn't create the PDF. " + (navigator.onLine === false ? 'Connect to the internet once so the app can download its PDF tools, then try again.' : (err && err.message ? err.message : '')));
+    });
+  }
+  function importFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var parsed;
+      try { parsed = JSON.parse(reader.result); } catch (e) { toast("That file isn't a backup from this app."); return; }
+      var next = normalize(parsed && parsed.data ? parsed.data : parsed);
+      if (!next) { toast("That file isn't a backup from this app."); return; }
+      var before = JSON.stringify(S);
+      S = next;
+      ui.lockPending = null;
+      save(); render(); renderMemberList();
+      toast('Backup loaded: ' + S.members.length + ' members' + (S.t ? ' and the saved tournament' : '') + '.', 'Undo', function () {
+        S = normalize(JSON.parse(before)); save(); render(); renderMemberList();
+      });
+    };
+    reader.onerror = function () { toast("Couldn't read that file."); };
+    reader.readAsText(file);
+  }
+  $('importFile').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (f) importFile(f);
+    e.target.value = '';
+  });
+
+  // ── Rendering ────────────────────────────────────────────────────────────
+  function sectionOpen(key) {
+    if (ui.open[key] !== null) return ui.open[key];
+    return !S.t; // open before a tournament, collapsed during one
+  }
+
+  function renderSetup() {
+    var sel = selectedPlayers();
+    var n = sel.length, courts = Math.floor(n / 4), bench = n % 4;
+    var t = S.t;
+
+    var playersOpen = sectionOpen('players');
+    var summary = n + ' selected · ' + courts + (courts === 1 ? ' court' : ' courts') + (bench ? ' · ' + bench + ' on the bench each round' : '');
+    var chips = S.members.length
+      ? S.members.map(function (m, i) {
+          return '<button type="button" class="chip" data-action="toggle-player" data-i="' + i + '" aria-pressed="' + contains(sel, m) + '">' + esc(m) + '</button>';
+        }).join('')
+      : '<p class="hint">No club members yet. Add them with the settings button at the top right.</p>';
+    var selChanged = t && (t.players.length !== n || t.players.some(function (p) { return !contains(sel, p); }));
+
+    var pool = lockPool();
+    var lockedFlat = flatPairs(S.locked);
+    var available = pool.filter(function (p) { return !contains(lockedFlat, p); });
+    var locksOpen = sectionOpen('locks');
+    var pairsHtml = S.locked.length
+      ? S.locked.map(function (p, i) {
+          var active = contains(pool, p[0]) && contains(pool, p[1]);
+          return '<span class="pair' + (active ? '' : ' inactive') + '">' + esc(p[0]) + ' &amp; ' + esc(p[1]) +
+            (active ? '' : ' (not playing)') +
+            '<button type="button" data-action="unlock" data-i="' + i + '" aria-label="Unlock ' + esc(p[0]) + ' and ' + esc(p[1]) + '">' + ICON_X + '</button></span>';
+        }).join('')
+      : '<span class="hint">No locked teams.</span>';
+    var pickHtml = available.length < 2
+      ? '<span class="hint">Everyone playing is already in a locked team.</span>'
+      : available.map(function (p) {
+          var idx = pool.indexOf(p);
+          return '<button type="button" class="chip' + (ui.lockPending === p ? ' pending' : '') + '" data-action="pick-lock" data-i="' + idx + '">' + esc(p) + '</button>';
+        }).join('');
+    var lockHint = ui.lockPending
+      ? '<b>' + esc(ui.lockPending) + '</b> selected. Now tap their partner.'
+      : 'Tap two players to lock them as a team for every round.';
+
+    $('setup').innerHTML =
+      '<section class="panel">' +
+        '<div class="panel-body" style="padding-top:14px">' +
+          '<span class="label">Format</span>' +
+          '<div class="seg" role="group" aria-label="Format">' +
+            '<button type="button" data-action="mode" data-mode="americano" aria-pressed="' + (S.mode === 'americano') + '">Americano</button>' +
+            '<button type="button" data-action="mode" data-mode="mexicano" aria-pressed="' + (S.mode === 'mexicano') + '">Mexicano</button>' +
+          '</div>' +
+          '<p class="hint">' + (S.mode === 'americano'
+            ? 'Random partners and opponents every round.'
+            : 'Teams with similar points play each other.') +
+            (t ? ' Applies from the next round.' : '') + '</p>' +
+        '</div>' +
+      '</section>' +
+
+      '<section class="panel">' +
+        '<button type="button" class="panel-head" data-action="toggle-section" data-section="players" aria-expanded="' + playersOpen + '">' +
+          '<span><span class="panel-title">Players today</span><br><span class="panel-sub">' + summary + '</span></span>' + ICON_CHEV +
+        '</button>' +
+        (playersOpen
+          ? '<div class="panel-body">' +
+              '<div class="row"><button type="button" class="link-btn" data-action="select-all">Select all</button><button type="button" class="link-btn" data-action="select-none">Clear</button></div>' +
+              '<div class="chips">' + chips + '</div>' +
+              (selChanged ? '<p class="hint">Changes to players apply when you start a new tournament.</p>' : '') +
+            '</div>'
+          : '') +
+      '</section>' +
+
+      '<section class="panel">' +
+        '<button type="button" class="panel-head" data-action="toggle-section" data-section="locks" aria-expanded="' + locksOpen + '">' +
+          '<span><span class="panel-title">Locked teams</span><br><span class="panel-sub">' +
+          (S.locked.length ? S.locked.length + (S.locked.length === 1 ? ' team' : ' teams') + ' locked' : 'Optional') + '</span></span>' + ICON_CHEV +
+        '</button>' +
+        (locksOpen
+          ? '<div class="panel-body">' +
+              '<div class="chips">' + pairsHtml + '</div>' +
+              '<p class="hint">' + lockHint + '</p>' +
+              '<div class="chips">' + pickHtml + '</div>' +
+            '</div>'
+          : '') +
+      '</section>' +
+
+      '<div class="start-row"><button type="button" class="btn block" data-action="start">' + (t ? 'Start new tournament' : 'Start tournament') + '</button></div>';
+  }
+
+  function sideHtml(team, totals, scoreInput) {
+    return '<div class="side"><div class="names">' + esc(joinTeam(team)) +
+      '<small>' + totals + '</small></div>' + scoreInput + '</div>';
+  }
+
+  function renderMain() {
+    var t = S.t;
+    var el = $('main');
+    if (!t) {
+      el.innerHTML = '<div class="empty"><strong>No tournament running</strong>Pick today\'s players and tap Start tournament. Rounds and scores are saved on this device as you play.</div>';
+      return;
+    }
+    var st = stats();
+    var pts = function (p) { return st[p] ? st[p].points : 0; };
+    var html = '<div class="tabs"><div class="seg" role="group" aria-label="View">' +
+      '<button type="button" data-action="tab" data-tab="round" aria-pressed="' + (S.tab === 'round') + '">Current round</button>' +
+      '<button type="button" data-action="tab" data-tab="results" aria-pressed="' + (S.tab === 'results') + '">Results (' + t.rounds.length + ')</button>' +
+      '</div></div>';
+
+    if (S.tab === 'results') {
+      if (!t.rounds.length) {
+        html += '<div class="empty"><strong>No results yet</strong>Submitted rounds show up here, and you can correct any score.</div>';
+      } else {
+        html += '<div class="section-row"><h2>Results</h2><button type="button" class="mini-btn" data-action="pdf" data-preset="results">' + ICON_PDF + 'PDF</button></div>';
+        t.rounds.forEach(function (r, ri) {
+          html += '<div class="results-round"><h3>Round ' + r.n + '</h3><div class="courts">';
+          r.courts.forEach(function (c, ci) {
+            html += '<div class="court"><div class="court-label"><span>Court ' + (ci + 1) + '</span></div>';
+            c.teams.forEach(function (team, si) {
+              html += sideHtml(team, '',
+                '<input class="score res" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" ' +
+                'id="res-' + ri + '-' + ci + '-' + si + '" data-r="' + ri + '" data-c="' + ci + '" data-s="' + si + '" value="' + c.score[si] + '" aria-label="Score for ' + esc(joinTeam(team)) + '">');
+            });
+            html += '<div class="court-foot"><button type="button" class="btn secondary" data-action="save-result" data-r="' + ri + '" data-c="' + ci + '">Save change</button></div></div>';
+          });
+          html += '</div><p class="bench"><b>Bench:</b> ' + (r.bench.length ? esc(r.bench.join(', ')) : 'nobody') + '</p></div>';
+        });
+      }
+      el.innerHTML = html;
+      return;
+    }
+
+    var cur = t.current;
+    if (!cur) {
+      html += '<div class="empty"><strong>Next round not created</strong>Fix the locked teams if needed, then try again.<div style="margin-top:12px"><button type="button" class="btn" data-action="next-round">Create next round</button></div></div>';
+      el.innerHTML = html;
+      return;
+    }
+
+    html += '<div class="round-head"><h2>Round ' + cur.n + '</h2><span class="pill">' + (cur.mode === 'mexicano' ? 'Mexicano' : 'Americano') + '</span></div>';
+    if (t.locksChanged) {
+      html += '<div class="banner">Locked teams changed since this round was drawn.<button type="button" class="btn warn" style="background:var(--surface);color:var(--fg)" data-action="rebuild">Redraw this round</button></div>';
+    }
+    html += '<div class="courts">';
+    cur.courts.forEach(function (c, ci) {
+      html += '<div class="court' + (ui.errorCourt === ci ? ' error' : '') + '"><div class="court-label"><span>Court ' + (ci + 1) + '</span><span>Win by 2</span></div>';
+      c.teams.forEach(function (team, si) {
+        var total = pts(team[0]) + pts(team[1]);
+        html += sideHtml(team, total + ' pts so far',
+          '<input class="score" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" enterkeyhint="next" ' +
+          'id="score-' + ci + '-' + si + '" data-court="' + ci + '" data-side="' + si + '" value="' + esc(c.draft[si]) + '" aria-label="Score for ' + esc(joinTeam(team)) + '">');
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<p class="bench"><b>Bench:</b> ' + (cur.bench.length ? esc(cur.bench.join(', ')) : 'nobody sits out') + '</p>';
+
+    var benchSize = t.players.length % 4;
+    if (benchSize) {
+      var counts = t.players.map(function (p) { return st[p] ? st[p].bench : 0; });
+      var maxB = Math.max.apply(null, counts), deficit = 0;
+      counts.forEach(function (b) { deficit += maxB - b; });
+      var extra = Math.ceil(deficit / benchSize);
+      html += '<p class="fair">' + (extra ? 'Play ' + extra + ' more ' + (extra === 1 ? 'round' : 'rounds') + ' after this one for everyone to have sat out equally.' : 'Everyone has sat out equally after this round.') + '</p>';
+    } else {
+      html += '<p class="fair">Nobody sits out with ' + t.players.length + ' players.</p>';
+    }
+    html += '<button type="button" class="btn block" data-action="submit">Submit round ' + cur.n + '</button>';
+    el.innerHTML = html;
+  }
+
+  function renderStandings() {
+    var t = S.t, el = $('standings');
+    if (!t) { el.innerHTML = ''; return; }
+    var st = stats();
+    var rows = [];
+    if (S.standView === 'teams') {
+      activeLockedPairs(t.players).forEach(function (p) {
+        var s = st[p[0]] || { points: 0, wins: 0, losses: 0, bench: 0, form: [] };
+        rows.push({ label: joinTeam(p), s: s });
+      });
+    } else {
+      t.players.forEach(function (p) { rows.push({ label: p, s: st[p] || { points: 0, wins: 0, losses: 0, bench: 0, form: [] } }); });
+    }
+    if (S.rankBy === 'record') {
+      rows.sort(function (a, b) { return (b.s.wins - a.s.wins) || (a.s.losses - b.s.losses) || (b.s.points - a.s.points); });
+    } else {
+      rows.sort(function (a, b) { return (b.s.points - a.s.points) || (b.s.wins - a.s.wins); });
+    }
+    var rec = S.rankBy === 'record';
+    var head = rec ? '<th>W</th><th>L</th><th>Pts</th>' : '<th>Pts</th><th>W</th><th>L</th>';
+    var body = rows.length ? rows.map(function (r, i) {
+      var cells = rec
+        ? '<td class="key">' + r.s.wins + '</td><td>' + r.s.losses + '</td><td>' + r.s.points + '</td>'
+        : '<td class="key">' + r.s.points + '</td><td>' + r.s.wins + '</td><td>' + r.s.losses + '</td>';
+      var form = r.s.form.slice(-8).map(function (x) { return '<span class="' + (x === 'W' ? 'w' : 'l') + '">' + x + '</span>'; }).join('');
+      return '<tr><td class="rank">' + (i + 1) + '</td><td class="name">' + esc(r.label) + '</td>' + cells + '<td>' + r.s.bench + '</td><td class="form">' + (form || '–') + '</td></tr>';
+    }).join('') : '<tr><td colspan="7" class="name" style="color:var(--muted)">No locked teams are playing in this tournament.</td></tr>';
+
+    el.innerHTML = '<section class="standings"><div class="section-row"><h2>Standings</h2><button type="button" class="mini-btn" data-action="pdf" data-preset="standings">' + ICON_PDF + 'PDF</button></div>' +
+      '<div class="toggles">' +
+        '<div class="seg" role="group" aria-label="Show"><button type="button" data-action="stand-view" data-v="individual" aria-pressed="' + (S.standView === 'individual') + '">Players</button><button type="button" data-action="stand-view" data-v="teams" aria-pressed="' + (S.standView === 'teams') + '">Teams</button></div>' +
+        '<div class="seg" role="group" aria-label="Rank by"><button type="button" data-action="rank-by" data-v="points" aria-pressed="' + !rec + '">Points</button><button type="button" data-action="rank-by" data-v="record" aria-pressed="' + rec + '">Wins</button></div>' +
+      '</div>' +
+      '<div class="table-wrap"><table><thead><tr><th>#</th><th class="name">' + (S.standView === 'teams' ? 'Team' : 'Player') + '</th>' + head + '<th>Bench</th><th>Form</th></tr></thead><tbody>' + body + '</tbody></table></div></section>';
+  }
+
+  function render() { renderSetup(); renderMain(); renderStandings(); $('storageNote').hidden = storageOK; }
+
+  // ── Settings sheet ───────────────────────────────────────────────────────
+  function openSettings() {
+    ui.settingsOpen = true;
+    ui.newMember = null;
+    $('overlayRoot').innerHTML =
+      '<div class="overlay" id="settingsOverlay">' +
+        '<div class="backdrop" data-action="close-settings"></div>' +
+        '<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">' +
+          '<div class="sheet-head"><h2 id="settingsTitle">Settings</h2>' +
+            '<button type="button" class="icon-btn" data-action="close-settings" aria-label="Close settings">' + ICON_X + '</button></div>' +
+          '<div class="sheet-body">' +
+            '<section class="sheet-section">' +
+              '<h3>Club members <span class="count" id="memberCount"></span></h3>' +
+              '<form class="add-form" id="addForm" novalidate>' +
+                '<input id="newMember" type="text" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="done" maxlength="40" placeholder="New member name" aria-label="New member name">' +
+                '<button type="submit" class="btn">Add</button>' +
+              '</form>' +
+              '<p class="field-error" id="addError" role="alert" hidden></p>' +
+              '<ul class="member-list" id="memberList"></ul>' +
+            '</section>' +
+            '<section class="sheet-section">' +
+              '<h3>Backup</h3>' +
+              '<p class="hint">Everything is stored on this device only. Export a backup before you switch phones or clear your browser data.</p>' +
+              '<div class="btn-grid">' +
+                '<button type="button" class="btn secondary" data-action="export">Export backup</button>' +
+                '<button type="button" class="btn secondary" data-action="import">Import backup</button>' +
+              '</div>' +
+            '</section>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.classList.add('no-scroll');
+    renderMemberList();
+  }
+
+  function renderMemberList() {
+    var list = $('memberList');
+    if (!list) return;
+    $('memberCount').textContent = S.members.length;
+    list.innerHTML = S.members.length
+      ? S.members.map(function (m, i) {
+          return '<li' + (m === ui.newMember ? ' class="new"' : '') + '><span>' + esc(m) + '</span>' +
+            '<button type="button" data-action="remove-member" data-i="' + i + '" aria-label="Remove ' + esc(m) + '">' + ICON_X + '</button></li>';
+        }).join('')
+      : '<li><span class="hint">No members yet. Add the first one above.</span></li>';
+  }
+
+  function closeOverlay() {
+    ui.settingsOpen = false;
+    $('overlayRoot').innerHTML = '';
+    document.body.classList.remove('no-scroll');
+  }
+
+  var confirmFn = null;
+  function confirmDialog(title, text, okLabel, onOk) {
+    confirmFn = onOk;
+    $('overlayRoot').innerHTML =
+      '<div class="overlay center">' +
+        '<div class="backdrop" data-action="close-overlay"></div>' +
+        '<div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitle">' +
+          '<h2 id="dlgTitle">' + esc(title) + '</h2><p>' + esc(text) + '</p>' +
+          '<div class="btn-grid"><button type="button" class="btn secondary" data-action="close-overlay">Cancel</button>' +
+          '<button type="button" class="btn danger" data-action="confirm-ok">' + esc(okLabel) + '</button></div>' +
+        '</div>' +
+      '</div>';
+    document.body.classList.add('no-scroll');
+  }
+
+  // ── Events (one delegated listener; no inline onclick) ───────────────────
+  document.addEventListener('click', function (e) {
+    var el = e.target && e.target.closest ? e.target.closest('[data-action]') : null;
+    if (!el) return;
+    var a = el.getAttribute('data-action');
+    var i = parseInt(el.getAttribute('data-i'), 10);
+    switch (a) {
+      case 'open-settings': openSettings(); break;
+      case 'close-settings':
+      case 'close-overlay': closeOverlay(); break;
+      case 'confirm-ok': { var fn = confirmFn; confirmFn = null; closeOverlay(); if (fn) fn(); break; }
+      case 'mode': S.mode = el.getAttribute('data-mode'); save(); render(); break;
+      case 'toggle-section': {
+        var key = el.getAttribute('data-section');
+        ui.open[key] = !sectionOpen(key); render(); break;
+      }
+      case 'toggle-player': if (S.members[i] != null) togglePlayer(S.members[i]); break;
+      case 'select-all': selectAll(true); break;
+      case 'select-none': selectAll(false); break;
+      case 'pick-lock': { var pool = lockPool(); if (pool[i] != null) pickLock(pool[i]); break; }
+      case 'unlock': unlock(i); break;
+      case 'start': startTournament(); break;
+      case 'submit': submitRound(); break;
+      case 'rebuild': rebuildRound(); break;
+      case 'next-round': nextRound(); break;
+      case 'tab': S.tab = el.getAttribute('data-tab'); save(); renderMain(); break;
+      case 'save-result': saveResult(parseInt(el.getAttribute('data-r'), 10), parseInt(el.getAttribute('data-c'), 10)); break;
+      case 'stand-view': S.standView = el.getAttribute('data-v'); save(); renderStandings(); break;
+      case 'rank-by': S.rankBy = el.getAttribute('data-v'); save(); renderStandings(); break;
+      case 'remove-member': if (S.members[i] != null) removeMember(S.members[i]); break;
+      case 'export': exportData(); break;
+      case 'import': $('importFile').click(); break;
+      case 'pdf': openPdfDialog(el.getAttribute('data-preset')); break;
+      case 'pdf-go': createPdf(); break;
+    }
+  });
+
+  document.addEventListener('submit', function (e) {
+    if (e.target && e.target.id === 'addForm') {
+      e.preventDefault();
+      var input = $('newMember');
+      var err = addMember(input.value);
+      var errEl = $('addError');
+      if (err) {
+        errEl.textContent = err; errEl.hidden = false;
+      } else {
+        errEl.hidden = true;
+        input.value = '';
+        renderMemberList(); render();
+        toast('Added ' + ui.newMember + '.');
+      }
+      input.focus();
+    }
+  });
+
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (el && el.id === 'newMember') { $('addError').hidden = true; return; }
+    if (el && (el.id === 'pdfStandings' || el.id === 'pdfResults')) { var pe = $('pdfError'); if (pe) pe.hidden = true; return; }
+    if (!el || !el.classList || !el.classList.contains('score')) return;
+    var digits = el.value.replace(/[^0-9]/g, '').slice(0, 2);
+    if (digits !== el.value) el.value = digits;
+    var c = el.getAttribute('data-court');
+    if (c !== null && S.t && S.t.current) {
+      var court = S.t.current.courts[parseInt(c, 10)];
+      if (court) {
+        court.draft[parseInt(el.getAttribute('data-side'), 10)] = digits;
+        if (ui.errorCourt === parseInt(c, 10)) { ui.errorCourt = -1; var card = el.closest('.court'); if (card) card.classList.remove('error'); }
+        save();
+      }
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el && (el.id === 'pdfStandings' || el.id === 'pdfResults')) { var pe = $('pdfError'); if (pe) pe.hidden = true; }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && $('overlayRoot').innerHTML) closeOverlay();
+  });
+
+  // ── Start up ─────────────────────────────────────────────────────────────
+  probeStorage();
+  render();
+  if (location.hash === '#settings') openSettings();
+  if (firstRun) {
+    save();
+    // First launch: try to take the member list from the old Google Sheet once.
+    fetchSheetNames().then(function (names) {
+      if (S.membersEdited || S.t) return;
+      var fromSheet = normalize({ members: names });
+      if (!fromSheet) return;
+      S.members = fromSheet.members;
+      S.selected = fromSheet.members.slice();
+      S.locked = [];
+      save(); render(); renderMemberList();
+      toast('Loaded ' + S.members.length + ' club members from the Google Sheet.');
+    }).catch(function () { /* offline or blocked: keep the default list */ });
+  }
+
+  // Ask the browser to keep our data even when the device is low on space.
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {}); } catch (e) { /* ignore */ }
+
+  // Offline support when installed as an app.
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () { /* not available here */ });
+    });
+  }
+
+  // Exposed for tests only.
+  window.__pickleball = { get state() { return S; }, stats: stats, render: render, buildPdf: buildPdf };
+})();
+</script>
+</body>
+</html>
