@@ -246,14 +246,18 @@
 
   /* Standings */
   .standings { margin-top: 28px; }
-  .standings .toggles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .standings .toggles { display: grid; grid-template-columns: 1fr 1.25fr; gap: 8px; margin: 10px 0; }
+  .seg.seg3 { grid-template-columns: 1fr 1.3fr 1fr; }
+  .seg.seg3 button { padding-left: 4px; padding-right: 4px; }
+  .standings-note { margin-top: 8px; }
   .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
   table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { padding: 9px 8px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th, td { padding: 9px 5px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
   th { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); background: var(--surface-2); }
   td.name, th.name { text-align: left; white-space: normal; }
   tr:last-child td { border-bottom: 0; }
-  td.rank { color: var(--muted); width: 2.2em; }
+  td.rank { color: var(--muted); width: 1.8em; }
+  td.name, th.name { padding-left: 4px; }
   td.key { font-weight: 700; }
   .form { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; letter-spacing: .05em; }
   .form .w { color: var(--accent); font-weight: 700; }
@@ -477,7 +481,7 @@
       locked: locked,
       mode: o.mode === 'mexicano' ? 'mexicano' : 'americano',
       standView: o.standView === 'teams' ? 'teams' : 'individual',
-      rankBy: o.rankBy === 'record' ? 'record' : 'points',
+      rankBy: (o.rankBy === 'record' || o.rankBy === 'diff') ? o.rankBy : 'points',
       scoring: o.scoring === 'draw' ? 'draw' : 'win2',
       tab: o.tab === 'results' ? 'results' : 'round',
       membersEdited: !!o.membersEdited,
@@ -531,8 +535,8 @@
     var st = {};
     var t = S.t;
     if (!t) return st;
-    t.players.forEach(function (p) { st[p] = { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] }; });
-    function ensure(p) { if (!st[p]) st[p] = { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] }; return st[p]; }
+    t.players.forEach(function (p) { st[p] = { pf: 0, pa: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [], pts: 0, diff: 0 }; });
+    function ensure(p) { if (!st[p]) st[p] = { pf: 0, pa: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [], pts: 0, diff: 0 }; return st[p]; }
     t.rounds.forEach(function (r) {
       r.bench.forEach(function (p) { ensure(p).bench++; });
       r.courts.forEach(function (c) {
@@ -540,7 +544,8 @@
         c.teams.forEach(function (team, ti) {
           team.forEach(function (p) {
             var s = ensure(p);
-            s.points += c.score[ti];
+            s.pf += c.score[ti];
+            s.pa += c.score[1 - ti];
             if (winner === -1) { s.draws++; s.form.push('D'); }
             else if (ti === winner) { s.wins++; s.form.push('W'); } else { s.losses++; s.form.push('L'); }
           });
@@ -548,7 +553,35 @@
       });
     });
     if (t.current) t.current.bench.forEach(function (p) { ensure(p).bench++; });
+    Object.keys(st).forEach(function (p) {
+      var s = st[p];
+      s.pts = 2 * s.wins + s.draws;   // win 2 points, draw 1, loss 0
+      s.diff = s.pf - s.pa;           // score for minus score against
+    });
     return st;
+  }
+
+  // ── Ranking and standings columns (shared by the screen and the PDF) ─────
+  var RANKERS = {
+    points: function (a, b) { return (b.pts - a.pts) || (b.diff - a.diff) || (b.pf - a.pf) || (b.wins - a.wins); },
+    record: function (a, b) { return (b.wins - a.wins) || (a.losses - b.losses) || (b.draws - a.draws) || (b.diff - a.diff) || (b.pf - a.pf); },
+    diff:   function (a, b) { return (b.diff - a.diff) || (b.pts - a.pts) || (b.pf - a.pf); }
+  };
+  var RANK_NAMES = { points: 'points', record: 'wins', diff: '+/-' };
+  function fmtDiff(n, ascii) { return n > 0 ? '+' + n : n < 0 ? (ascii ? '-' : '\u2212') + (-n) : '0'; }
+  // Number columns in display order; the first one is what the table is ranked by.
+  function standCols(by, withDraws, ascii) {
+    var c = {
+      pts:  { h: 'Pts', v: function (s) { return s.pts; } },
+      w:    { h: 'W',   v: function (s) { return s.wins; } },
+      d:    { h: 'D',   v: function (s) { return s.draws; } },
+      l:    { h: 'L',   v: function (s) { return s.losses; } },
+      diff: { h: '+/-', v: function (s) { return fmtDiff(s.diff, ascii); } }
+    };
+    var order = by === 'record' ? ['w', 'd', 'l', 'pts', 'diff']
+      : by === 'diff' ? ['diff', 'pts', 'w', 'd', 'l']
+      : ['pts', 'w', 'd', 'l', 'diff'];
+    return order.filter(function (k) { return k !== 'd' || withDraws; }).map(function (k) { return c[k]; });
   }
 
   // True once any submitted round has a tied score: standings then show a D column.
@@ -621,7 +654,7 @@
     var shuffledFree = shuffle(activeFree);
     for (var i = 0; i + 1 < shuffledFree.length; i += 2) teams.push([shuffledFree[i], shuffledFree[i + 1]]);
 
-    var pts = function (p) { return st[p] ? st[p].points : 0; };
+    var pts = function (p) { return st[p] ? st[p].pf : 0; };
     if (S.mode === 'mexicano') {
       teams = shuffle(teams).sort(function (a, b) { return (pts(b[0]) + pts(b[1])) - (pts(a[0]) + pts(a[1])); });
     } else {
@@ -883,17 +916,14 @@
 
   function standingsRows(view, rankBy) {
     var t = S.t, st = stats(), rows = [];
-    var blank = { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] };
+    var blank = { pf: 0, pa: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [], pts: 0, diff: 0 };
     if (view === 'teams') {
       activeLockedPairs(t.players).forEach(function (p) { rows.push({ label: joinTeam(p), s: st[p[0]] || blank }); });
     } else {
       t.players.forEach(function (p) { rows.push({ label: p, s: st[p] || blank }); });
     }
-    if (rankBy === 'record') {
-      rows.sort(function (a, b) { return (b.s.wins - a.s.wins) || (a.s.losses - b.s.losses) || (b.s.points - a.s.points); });
-    } else {
-      rows.sort(function (a, b) { return (b.s.points - a.s.points) || (b.s.wins - a.s.wins); });
-    }
+    var cmp = RANKERS[rankBy] || RANKERS.points;
+    rows.sort(function (a, b) { return cmp(a.s, b.s); });
     return rows;
   }
 
@@ -908,7 +938,6 @@
     };
     var M = 40, W = doc.internal.pageSize.getWidth();
     var BLUE = [29, 79, 145], INK = [20, 32, 46], MUTED = [90, 106, 124], LINE = [211, 219, 228], SOFT = [243, 246, 249];
-    var rec = S.rankBy === 'record';
     var modes = {};
     t.rounds.forEach(function (r) { modes[r.mode === 'mexicano' ? 'Mexicano' : 'Americano'] = true; });
     var modeText = Object.keys(modes).join(' + ') || (S.mode === 'mexicano' ? 'Mexicano' : 'Americano');
@@ -945,23 +974,26 @@
     function standingsTable(view, title) {
       var rows = standingsRows(view, S.rankBy);
       if (!rows.length) return;
-      heading(title, 'Ranked by ' + (rec ? 'wins' : 'points'));
-      var dr = hasDraws();
-      var cols = rec ? (dr ? ['W', 'D', 'L', 'Pts'] : ['W', 'L', 'Pts']) : (dr ? ['Pts', 'W', 'D', 'L'] : ['Pts', 'W', 'L']);
+      heading(title, 'Ranked by ' + (RANK_NAMES[S.rankBy] || 'points') + '   |   win 2 pts, draw 1');
+      var cols = standCols(S.rankBy, hasDraws(), true);
+      var n = cols.length;
       y = table(merge(base, {
         startY: y,
-        head: [['#', view === 'teams' ? 'Team' : 'Player'].concat(cols).concat(['Bench', 'Form'])],
+        head: [['#', view === 'teams' ? 'Team' : 'Player']
+          .concat(cols.map(function (c) { return c.h; }))
+          .concat(['For', 'Against', 'Bench', 'Form'])],
         body: rows.map(function (r, i) {
-          var nums = rec
-            ? (dr ? [r.s.wins, r.s.draws, r.s.losses, r.s.points] : [r.s.wins, r.s.losses, r.s.points])
-            : (dr ? [r.s.points, r.s.wins, r.s.draws, r.s.losses] : [r.s.points, r.s.wins, r.s.losses]);
-          return [i + 1, r.label].concat(nums).concat([r.s.bench, r.s.form.join(' ') || '-']);
+          return [i + 1, r.label]
+            .concat(cols.map(function (c) { return c.v(r.s); }))
+            .concat([r.s.pf, r.s.pa, r.s.bench, r.s.form.join(' ') || '-']);
         }),
         columnStyles: (function () {
-          var cs = { 0: { halign: 'center', cellWidth: 26, textColor: MUTED }, 2: { halign: 'center', cellWidth: 40, fontStyle: 'bold' } };
-          for (var k = 3; k < 3 + cols.length - 1; k++) cs[k] = { halign: 'center', cellWidth: 36 };
-          cs[2 + cols.length] = { halign: 'center', cellWidth: 42 };
-          cs[3 + cols.length] = { font: 'courier', fontSize: 9 };
+          var cs = { 0: { halign: 'center', cellWidth: 24, textColor: MUTED }, 2: { halign: 'center', cellWidth: 34, fontStyle: 'bold' } };
+          for (var k = 3; k < 2 + n; k++) cs[k] = { halign: 'center', cellWidth: 30 };
+          cs[2 + n] = { halign: 'center', cellWidth: 36 };
+          cs[3 + n] = { halign: 'center', cellWidth: 46 };
+          cs[4 + n] = { halign: 'center', cellWidth: 38 };
+          cs[5 + n] = { font: 'courier', fontSize: 9 };
           return cs;
         })()
       })) + 26;
@@ -1028,7 +1060,7 @@
           '<p>Choose what to include. The file is A4 and ready to print or send.</p>' +
           '<div class="check-list">' +
             '<label class="check-row" for="pdfStandings"><input type="checkbox" id="pdfStandings"' + (preset === 'standings' ? ' checked' : '') + '>' +
-              '<span><b>Standings</b><small>Points, wins, losses, bench turns and form for every player' + (activeLockedPairs(S.t.players).length ? ', plus locked teams' : '') + '.</small></span></label>' +
+              '<span><b>Standings</b><small>Points, wins, draws, losses, +/-, bench turns and form for every player' + (activeLockedPairs(S.t.players).length ? ', plus locked teams' : '') + '.</small></span></label>' +
             '<label class="check-row" for="pdfResults"><input type="checkbox" id="pdfResults"' + (preset === 'results' ? ' checked' : '') + '>' +
               '<span><b>Results</b><small>Every submitted round: courts, teams, scores and who sat out (' + S.t.rounds.length + (S.t.rounds.length === 1 ? ' round' : ' rounds') + ').</small></span></label>' +
           '</div>' +
@@ -1152,7 +1184,7 @@
           '</div>' +
           '<p class="hint">' + (S.mode === 'americano'
             ? 'Random partners and opponents every round.'
-            : 'Teams with similar points play each other.') +
+            : 'Teams with similar total scores play each other.') +
             (t ? ' Applies from the next round.' : '') + '</p>' +
           '<span class="label sub">Scoring</span>' +
           '<div class="seg" role="group" aria-label="Scoring">' +
@@ -1209,7 +1241,7 @@
       return;
     }
     var st = stats();
-    var pts = function (p) { return st[p] ? st[p].points : 0; };
+    var pts = function (p) { return st[p] ? st[p].pts : 0; };
     var html = '<div class="tabs"><div class="seg" role="group" aria-label="View">' +
       '<button type="button" data-action="tab" data-tab="round" aria-pressed="' + (S.tab === 'round') + '">Current round</button>' +
       '<button type="button" data-action="tab" data-tab="results" aria-pressed="' + (S.tab === 'results') + '">Results (' + t.rounds.length + ')</button>' +
@@ -1280,40 +1312,24 @@
   function renderStandings() {
     var t = S.t, el = $('standings');
     if (!t) { el.innerHTML = ''; return; }
-    var st = stats();
-    var rows = [];
-    if (S.standView === 'teams') {
-      activeLockedPairs(t.players).forEach(function (p) {
-        var s = st[p[0]] || { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] };
-        rows.push({ label: joinTeam(p), s: s });
-      });
-    } else {
-      t.players.forEach(function (p) { rows.push({ label: p, s: st[p] || { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] } }); });
-    }
-    if (S.rankBy === 'record') {
-      rows.sort(function (a, b) { return (b.s.wins - a.s.wins) || (a.s.losses - b.s.losses) || (b.s.points - a.s.points); });
-    } else {
-      rows.sort(function (a, b) { return (b.s.points - a.s.points) || (b.s.wins - a.s.wins); });
-    }
-    var rec = S.rankBy === 'record';
-    var dr = hasDraws();
-    var dTh = dr ? '<th>D</th>' : '';
-    var head = rec ? '<th>W</th>' + dTh + '<th>L</th><th>Pts</th>' : '<th>Pts</th><th>W</th>' + dTh + '<th>L</th>';
+    var by = RANKERS[S.rankBy] ? S.rankBy : 'points';
+    var rows = standingsRows(S.standView === 'teams' ? 'teams' : 'individual', by);
+    var cols = standCols(by, hasDraws(), false);
+    var head = cols.map(function (c) { return '<th>' + c.h + '</th>'; }).join('');
     var body = rows.length ? rows.map(function (r, i) {
-      var dTd = dr ? '<td>' + r.s.draws + '</td>' : '';
-      var cells = rec
-        ? '<td class="key">' + r.s.wins + '</td>' + dTd + '<td>' + r.s.losses + '</td><td>' + r.s.points + '</td>'
-        : '<td class="key">' + r.s.points + '</td><td>' + r.s.wins + '</td>' + dTd + '<td>' + r.s.losses + '</td>';
+      var cells = cols.map(function (c, k) { return '<td' + (k === 0 ? ' class="key"' : '') + '>' + c.v(r.s) + '</td>'; }).join('');
       var form = r.s.form.slice(-8).map(function (x) { return '<span class="' + x.toLowerCase() + '">' + x + '</span>'; }).join('');
       return '<tr><td class="rank">' + (i + 1) + '</td><td class="name">' + esc(r.label) + '</td>' + cells + '<td>' + r.s.bench + '</td><td class="form">' + (form || '–') + '</td></tr>';
-    }).join('') : '<tr><td colspan="' + (dr ? 8 : 7) + '" class="name" style="color:var(--muted)">No locked teams are playing in this tournament.</td></tr>';
+    }).join('') : '<tr><td colspan="' + (cols.length + 4) + '" class="name" style="color:var(--muted)">No locked teams are playing in this tournament.</td></tr>';
+    var rb = function (v, label) { return '<button type="button" data-action="rank-by" data-v="' + v + '" aria-pressed="' + (by === v) + '">' + label + '</button>'; };
 
     el.innerHTML = '<section class="standings"><div class="section-row"><h2>Standings</h2><button type="button" class="mini-btn" data-action="pdf" data-preset="standings">' + ICON_PDF + 'PDF</button></div>' +
       '<div class="toggles">' +
         '<div class="seg" role="group" aria-label="Show"><button type="button" data-action="stand-view" data-v="individual" aria-pressed="' + (S.standView === 'individual') + '">Players</button><button type="button" data-action="stand-view" data-v="teams" aria-pressed="' + (S.standView === 'teams') + '">Teams</button></div>' +
-        '<div class="seg" role="group" aria-label="Rank by"><button type="button" data-action="rank-by" data-v="points" aria-pressed="' + !rec + '">Points</button><button type="button" data-action="rank-by" data-v="record" aria-pressed="' + rec + '">Wins</button></div>' +
+        '<div class="seg seg3" role="group" aria-label="Rank by">' + rb('diff', '+/-') + rb('points', 'Points') + rb('record', 'Wins') + '</div>' +
       '</div>' +
-      '<div class="table-wrap"><table><thead><tr><th>#</th><th class="name">' + (S.standView === 'teams' ? 'Team' : 'Player') + '</th>' + head + '<th>Bench</th><th>Form</th></tr></thead><tbody>' + body + '</tbody></table></div></section>';
+      '<div class="table-wrap"><table><thead><tr><th>#</th><th class="name">' + (S.standView === 'teams' ? 'Team' : 'Player') + '</th>' + head + '<th>Bench</th><th>Form</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+      '<p class="hint standings-note">Points: win 2, draw 1, loss 0. +/- is score for minus score against.</p></section>';
   }
 
   function render() { renderSetup(); renderMain(); renderStandings(); $('storageNote').hidden = storageOK; }
@@ -1414,7 +1430,7 @@
       case 'tab': S.tab = el.getAttribute('data-tab'); save(); renderMain(); break;
       case 'save-result': saveResult(parseInt(el.getAttribute('data-r'), 10), parseInt(el.getAttribute('data-c'), 10)); break;
       case 'stand-view': S.standView = el.getAttribute('data-v'); save(); renderStandings(); break;
-      case 'rank-by': S.rankBy = el.getAttribute('data-v'); save(); renderStandings(); break;
+      case 'rank-by': { var v = el.getAttribute('data-v'); S.rankBy = RANKERS[v] ? v : 'points'; save(); renderStandings(); break; }
       case 'scoring':
         S.scoring = el.getAttribute('data-v') === 'draw' ? 'draw' : 'win2';
         ui.errorCourt = -1;
