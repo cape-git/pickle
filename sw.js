@@ -1,6 +1,6 @@
 // Pickleball Tournament service worker: makes the app work offline.
 // Bump VERSION whenever you upload a changed index.html, so phones pick it up.
-const VERSION = 'pickleball-v3';
+const VERSION = 'pickleball-v6';
 const APP_FILES = [
   './',
   './index.html',
@@ -28,9 +28,6 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-
-  // Never cache the Google Sheet: it must be live or fail.
-  if (url.hostname.endsWith('google.com')) return;
 
   // The page itself: try the network first so updates show up, fall back to the cached copy offline.
   if (req.mode === 'navigate') {

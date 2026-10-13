@@ -258,6 +258,8 @@
   .form { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; letter-spacing: .05em; }
   .form .w { color: var(--accent); font-weight: 700; }
   .form .l { color: var(--muted); }
+  .form .d { color: var(--fg); }
+  .label.sub { margin-top: 6px; }
 
   /* Overlays */
   .overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
@@ -348,7 +350,7 @@
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand"><span class="brand-ball" aria-hidden="true"></span><h1>Pickleball Tournament</h1></div>
-    <button type="button" class="icon-btn" id="settingsBtn" data-action="open-settings" aria-label="Settings: club members and backup">
+    <button type="button" class="icon-btn" id="settingsBtn" data-action="open-settings" aria-label="Settings: club members">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </div>
@@ -371,9 +373,7 @@
 
   // ── Config ───────────────────────────────────────────────────────────────
   var STORE_KEY = 'pickleball-tournament-v1';
-  // Only used once, on the very first launch, to fill the member list.
-  var SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT1b8pL4ZcWlC8X5nqeuTcWbUqcOz1VfJQsKtz2f3x7N2dmcdl2vYRIMGp5szX2SZutlaTM_GX5jrSE/pub?gid=0&single=true&output=csv';
-  var DEFAULT_MEMBERS = ['Alex', 'Blake', 'Casey', 'Drew', 'Elliot', 'Flynn', 'Gray', 'Harper', 'Jordan', 'Kai', 'Micky', 'Michael', 'Junior', 'Frank', 'Sofie'];
+  var DEFAULT_MEMBERS = [];  // New installs start empty: add members, or import a member list.
 
   var ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
   var ICON_PDF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 12v6M9 15l3 3 3-3"/></svg>';
@@ -434,6 +434,7 @@
       mode: 'americano',
       standView: 'individual',
       rankBy: 'points',
+      scoring: 'win2',
       tab: 'round',
       membersEdited: false,
       t: null
@@ -477,6 +478,7 @@
       mode: o.mode === 'mexicano' ? 'mexicano' : 'americano',
       standView: o.standView === 'teams' ? 'teams' : 'individual',
       rankBy: o.rankBy === 'record' ? 'record' : 'points',
+      scoring: o.scoring === 'draw' ? 'draw' : 'win2',
       tab: o.tab === 'results' ? 'results' : 'round',
       membersEdited: !!o.membersEdited,
       t: t
@@ -529,23 +531,31 @@
     var st = {};
     var t = S.t;
     if (!t) return st;
-    t.players.forEach(function (p) { st[p] = { points: 0, wins: 0, losses: 0, bench: 0, form: [] }; });
-    function ensure(p) { if (!st[p]) st[p] = { points: 0, wins: 0, losses: 0, bench: 0, form: [] }; return st[p]; }
+    t.players.forEach(function (p) { st[p] = { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] }; });
+    function ensure(p) { if (!st[p]) st[p] = { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] }; return st[p]; }
     t.rounds.forEach(function (r) {
       r.bench.forEach(function (p) { ensure(p).bench++; });
       r.courts.forEach(function (c) {
-        var winner = c.score[0] > c.score[1] ? 0 : 1;
+        var winner = c.score[0] === c.score[1] ? -1 : (c.score[0] > c.score[1] ? 0 : 1);
         c.teams.forEach(function (team, ti) {
           team.forEach(function (p) {
             var s = ensure(p);
             s.points += c.score[ti];
-            if (ti === winner) { s.wins++; s.form.push('W'); } else { s.losses++; s.form.push('L'); }
+            if (winner === -1) { s.draws++; s.form.push('D'); }
+            else if (ti === winner) { s.wins++; s.form.push('W'); } else { s.losses++; s.form.push('L'); }
           });
         });
       });
     });
     if (t.current) t.current.bench.forEach(function (p) { ensure(p).bench++; });
     return st;
+  }
+
+  // True once any submitted round has a tied score: standings then show a D column.
+  function hasDraws() {
+    return !!(S.t && S.t.rounds.some(function (r) {
+      return r.courts.some(function (c) { return c.score[0] === c.score[1]; });
+    }));
   }
 
   function parseScore(v) {
@@ -555,7 +565,7 @@
   function validateScore(s1, s2) {
     if (isNaN(s1) || isNaN(s2)) return 'enter both scores';
     if (s1 < 0 || s2 < 0) return 'scores cannot be negative';
-    if (Math.abs(s1 - s2) < 2) return 'the winner must win by 2';
+    if (S.scoring !== 'draw' && Math.abs(s1 - s2) < 2) return 'the winner must win by 2';
     return null;
   }
 
@@ -796,40 +806,7 @@
     });
   }
 
-  function parseCsvFirstColumn(text) {
-    var names = [];
-    text.split(/\r?\n/).forEach(function (line) {
-      var cell;
-      if (line.charAt(0) === '"') {
-        var m = line.match(/^"((?:[^"]|"")*)"/);
-        cell = m ? m[1].replace(/""/g, '"') : line;
-      } else {
-        cell = line.split(',')[0];
-      }
-      cell = cleanName(cell);
-      if (cell && cell.toLowerCase() !== 'name') names.push(cell);
-    });
-    return names;
-  }
-
-  function fetchSheetNames() {
-    if (typeof fetch !== 'function') return Promise.reject(new Error('fetch unavailable'));
-    var ctrl = ('AbortController' in window) ? new AbortController() : null;
-    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 8000);
-    return fetch(SHEET_CSV_URL, ctrl ? { signal: ctrl.signal } : {})
-      .then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.text();
-      })
-      .then(function (text) {
-        clearTimeout(timer);
-        var names = parseCsvFirstColumn(text);
-        if (!names.length) throw new Error('No names in the sheet');
-        return names;
-      }, function (err) { clearTimeout(timer); throw err; });
-  }
-
-  // ── Backup ───────────────────────────────────────────────────────────────
+  // ── Member list export/import ───────────────────────────────────────────────────────────────
   function isIOS() {
     return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   }
@@ -878,8 +855,9 @@
   }
 
   function exportData() {
-    var json = JSON.stringify({ app: 'pickleball-tournament', version: 1, exportedAt: new Date().toISOString(), data: S }, null, 2);
-    saveFile(new Blob([json], { type: 'application/json' }), 'pickleball-backup-' + today() + '.json', 'Backup');
+    if (!S.members.length) { toast('There are no club members to export yet.'); return; }
+    var json = JSON.stringify({ app: 'pickleball-members', version: 2, exportedAt: new Date().toISOString(), members: S.members }, null, 2);
+    saveFile(new Blob([json], { type: 'application/json' }), 'pickleball-members-' + today() + '.json', 'Member list');
   }
 
   // ── PDF export ───────────────────────────────────────────────────────────
@@ -905,7 +883,7 @@
 
   function standingsRows(view, rankBy) {
     var t = S.t, st = stats(), rows = [];
-    var blank = { points: 0, wins: 0, losses: 0, bench: 0, form: [] };
+    var blank = { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] };
     if (view === 'teams') {
       activeLockedPairs(t.players).forEach(function (p) { rows.push({ label: joinTeam(p), s: st[p[0]] || blank }); });
     } else {
@@ -968,22 +946,24 @@
       var rows = standingsRows(view, S.rankBy);
       if (!rows.length) return;
       heading(title, 'Ranked by ' + (rec ? 'wins' : 'points'));
-      var cols = rec ? ['W', 'L', 'Pts'] : ['Pts', 'W', 'L'];
+      var dr = hasDraws();
+      var cols = rec ? (dr ? ['W', 'D', 'L', 'Pts'] : ['W', 'L', 'Pts']) : (dr ? ['Pts', 'W', 'D', 'L'] : ['Pts', 'W', 'L']);
       y = table(merge(base, {
         startY: y,
         head: [['#', view === 'teams' ? 'Team' : 'Player'].concat(cols).concat(['Bench', 'Form'])],
         body: rows.map(function (r, i) {
-          var nums = rec ? [r.s.wins, r.s.losses, r.s.points] : [r.s.points, r.s.wins, r.s.losses];
+          var nums = rec
+            ? (dr ? [r.s.wins, r.s.draws, r.s.losses, r.s.points] : [r.s.wins, r.s.losses, r.s.points])
+            : (dr ? [r.s.points, r.s.wins, r.s.draws, r.s.losses] : [r.s.points, r.s.wins, r.s.losses]);
           return [i + 1, r.label].concat(nums).concat([r.s.bench, r.s.form.join(' ') || '-']);
         }),
-        columnStyles: {
-          0: { halign: 'center', cellWidth: 26, textColor: MUTED },
-          2: { halign: 'center', cellWidth: 40, fontStyle: 'bold' },
-          3: { halign: 'center', cellWidth: 36 },
-          4: { halign: 'center', cellWidth: 36 },
-          5: { halign: 'center', cellWidth: 42 },
-          6: { font: 'courier', fontSize: 9 }
-        }
+        columnStyles: (function () {
+          var cs = { 0: { halign: 'center', cellWidth: 26, textColor: MUTED }, 2: { halign: 'center', cellWidth: 40, fontStyle: 'bold' } };
+          for (var k = 3; k < 3 + cols.length - 1; k++) cs[k] = { halign: 'center', cellWidth: 36 };
+          cs[2 + cols.length] = { halign: 'center', cellWidth: 42 };
+          cs[3 + cols.length] = { font: 'courier', fontSize: 9 };
+          return cs;
+        })()
       })) + 26;
     }
 
@@ -1008,7 +988,7 @@
             styles: { fillColor: [223, 233, 246], fontStyle: 'bold', textColor: INK }
           }]);
           r.courts.forEach(function (c, ci) {
-            var win = c.score[0] > c.score[1] ? 0 : 1;
+            var win = c.score[0] === c.score[1] ? -1 : (c.score[0] > c.score[1] ? 0 : 1);
             body.push([
               { content: 'Court ' + (ci + 1), styles: { textColor: MUTED } },
               { content: joinTeam(c.teams[0]), styles: { fontStyle: win === 0 ? 'bold' : 'normal' } },
@@ -1032,7 +1012,7 @@
     for (var p = 1; p <= pages; p++) {
       doc.setPage(p);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-      doc.text('Winning team in bold. Generated ' + dateText + '.', M, doc.internal.pageSize.getHeight() - 24);
+      doc.text('Winning team in bold (no bold for a draw). Generated ' + dateText + '.', M, doc.internal.pageSize.getHeight() - 24);
       doc.text('Page ' + p + ' of ' + pages, W - M, doc.internal.pageSize.getHeight() - 24, { align: 'right' });
     }
     return doc.output(outType || 'blob');
@@ -1075,18 +1055,37 @@
       toast("Couldn't create the PDF. " + (navigator.onLine === false ? 'Connect to the internet once so the app can download its PDF tools, then try again.' : (err && err.message ? err.message : '')));
     });
   }
+  // Accepts a member-list file, an older full backup, or a plain JSON list of names.
+  function membersFromFile(parsed) {
+    var list = Array.isArray(parsed) ? parsed
+      : parsed && Array.isArray(parsed.members) ? parsed.members
+      : parsed && parsed.data && Array.isArray(parsed.data.members) ? parsed.data.members
+      : null;
+    if (!list) return null;
+    var n = normalize({ members: list });
+    return n && n.members.length ? n.members : null;
+  }
   function importFile(file) {
     var reader = new FileReader();
     reader.onload = function () {
-      var parsed;
-      try { parsed = JSON.parse(reader.result); } catch (e) { toast("That file isn't a backup from this app."); return; }
-      var next = normalize(parsed && parsed.data ? parsed.data : parsed);
-      if (!next) { toast("That file isn't a backup from this app."); return; }
+      var parsed, members;
+      try { parsed = JSON.parse(reader.result); } catch (e) { parsed = null; }
+      members = membersFromFile(parsed);
+      if (!members) { toast("That file isn't a member list from this app."); return; }
       var before = JSON.stringify(S);
+      var known = S.members.slice(), wasSelected = S.selected.slice();
+      // Replace only the member list. Names that were already here keep their
+      // "playing today" choice; new names start selected. Rounds, results and
+      // settings are left as they are.
+      var o = JSON.parse(before);
+      o.members = members;
+      o.selected = members.filter(function (m) { return !contains(known, m) || contains(wasSelected, m); });
+      var next = normalize(o);
+      if (!next) { toast("That file isn't a member list from this app."); return; }
       S = next;
       ui.lockPending = null;
       save(); render(); renderMemberList();
-      toast('Backup loaded: ' + S.members.length + ' members' + (S.t ? ' and the saved tournament' : '') + '.', 'Undo', function () {
+      toast('Member list loaded: ' + S.members.length + ' members.', 'Undo', function () {
         S = normalize(JSON.parse(before)); save(); render(); renderMemberList();
       });
     };
@@ -1116,7 +1115,7 @@
       ? S.members.map(function (m, i) {
           return '<button type="button" class="chip" data-action="toggle-player" data-i="' + i + '" aria-pressed="' + contains(sel, m) + '">' + esc(m) + '</button>';
         }).join('')
-      : '<p class="hint">No club members yet. Add them with the settings button at the top right.</p>';
+      : '<p class="hint">No club members yet. Add them, or import a member list, with the settings button at the top right.</p>';
     var selChanged = t && (t.players.length !== n || t.players.some(function (p) { return !contains(sel, p); }));
 
     var pool = lockPool();
@@ -1131,7 +1130,9 @@
             '<button type="button" data-action="unlock" data-i="' + i + '" aria-label="Unlock ' + esc(p[0]) + ' and ' + esc(p[1]) + '">' + ICON_X + '</button></span>';
         }).join('')
       : '<span class="hint">No locked teams.</span>';
-    var pickHtml = available.length < 2
+    var pickHtml = pool.length < 2
+      ? '<span class="hint">Pick at least two players above to lock a team.</span>'
+      : available.length < 2
       ? '<span class="hint">Everyone playing is already in a locked team.</span>'
       : available.map(function (p) {
           var idx = pool.indexOf(p);
@@ -1153,6 +1154,15 @@
             ? 'Random partners and opponents every round.'
             : 'Teams with similar points play each other.') +
             (t ? ' Applies from the next round.' : '') + '</p>' +
+          '<span class="label sub">Scoring</span>' +
+          '<div class="seg" role="group" aria-label="Scoring">' +
+            '<button type="button" data-action="scoring" data-v="win2" aria-pressed="' + (S.scoring !== 'draw') + '">Win by 2</button>' +
+            '<button type="button" data-action="scoring" data-v="draw" aria-pressed="' + (S.scoring === 'draw') + '">Draw OK</button>' +
+          '</div>' +
+          '<p class="hint">' + (S.scoring === 'draw'
+            ? 'Any score is accepted. Equal scores count as a draw.'
+            : 'The winning team must lead by at least 2 points.') +
+            (t ? ' Applies right away, also to the current round.' : '') + '</p>' +
         '</div>' +
       '</section>' +
 
@@ -1241,7 +1251,7 @@
     }
     html += '<div class="courts">';
     cur.courts.forEach(function (c, ci) {
-      html += '<div class="court' + (ui.errorCourt === ci ? ' error' : '') + '"><div class="court-label"><span>Court ' + (ci + 1) + '</span><span>Win by 2</span></div>';
+      html += '<div class="court' + (ui.errorCourt === ci ? ' error' : '') + '"><div class="court-label"><span>Court ' + (ci + 1) + '</span><span>' + (S.scoring === 'draw' ? 'Draw OK' : 'Win by 2') + '</span></div>';
       c.teams.forEach(function (team, si) {
         var total = pts(team[0]) + pts(team[1]);
         html += sideHtml(team, total + ' pts so far',
@@ -1274,11 +1284,11 @@
     var rows = [];
     if (S.standView === 'teams') {
       activeLockedPairs(t.players).forEach(function (p) {
-        var s = st[p[0]] || { points: 0, wins: 0, losses: 0, bench: 0, form: [] };
+        var s = st[p[0]] || { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] };
         rows.push({ label: joinTeam(p), s: s });
       });
     } else {
-      t.players.forEach(function (p) { rows.push({ label: p, s: st[p] || { points: 0, wins: 0, losses: 0, bench: 0, form: [] } }); });
+      t.players.forEach(function (p) { rows.push({ label: p, s: st[p] || { points: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [] } }); });
     }
     if (S.rankBy === 'record') {
       rows.sort(function (a, b) { return (b.s.wins - a.s.wins) || (a.s.losses - b.s.losses) || (b.s.points - a.s.points); });
@@ -1286,14 +1296,17 @@
       rows.sort(function (a, b) { return (b.s.points - a.s.points) || (b.s.wins - a.s.wins); });
     }
     var rec = S.rankBy === 'record';
-    var head = rec ? '<th>W</th><th>L</th><th>Pts</th>' : '<th>Pts</th><th>W</th><th>L</th>';
+    var dr = hasDraws();
+    var dTh = dr ? '<th>D</th>' : '';
+    var head = rec ? '<th>W</th>' + dTh + '<th>L</th><th>Pts</th>' : '<th>Pts</th><th>W</th>' + dTh + '<th>L</th>';
     var body = rows.length ? rows.map(function (r, i) {
+      var dTd = dr ? '<td>' + r.s.draws + '</td>' : '';
       var cells = rec
-        ? '<td class="key">' + r.s.wins + '</td><td>' + r.s.losses + '</td><td>' + r.s.points + '</td>'
-        : '<td class="key">' + r.s.points + '</td><td>' + r.s.wins + '</td><td>' + r.s.losses + '</td>';
-      var form = r.s.form.slice(-8).map(function (x) { return '<span class="' + (x === 'W' ? 'w' : 'l') + '">' + x + '</span>'; }).join('');
+        ? '<td class="key">' + r.s.wins + '</td>' + dTd + '<td>' + r.s.losses + '</td><td>' + r.s.points + '</td>'
+        : '<td class="key">' + r.s.points + '</td><td>' + r.s.wins + '</td>' + dTd + '<td>' + r.s.losses + '</td>';
+      var form = r.s.form.slice(-8).map(function (x) { return '<span class="' + x.toLowerCase() + '">' + x + '</span>'; }).join('');
       return '<tr><td class="rank">' + (i + 1) + '</td><td class="name">' + esc(r.label) + '</td>' + cells + '<td>' + r.s.bench + '</td><td class="form">' + (form || '–') + '</td></tr>';
-    }).join('') : '<tr><td colspan="7" class="name" style="color:var(--muted)">No locked teams are playing in this tournament.</td></tr>';
+    }).join('') : '<tr><td colspan="' + (dr ? 8 : 7) + '" class="name" style="color:var(--muted)">No locked teams are playing in this tournament.</td></tr>';
 
     el.innerHTML = '<section class="standings"><div class="section-row"><h2>Standings</h2><button type="button" class="mini-btn" data-action="pdf" data-preset="standings">' + ICON_PDF + 'PDF</button></div>' +
       '<div class="toggles">' +
@@ -1326,11 +1339,11 @@
               '<ul class="member-list" id="memberList"></ul>' +
             '</section>' +
             '<section class="sheet-section">' +
-              '<h3>Backup</h3>' +
-              '<p class="hint">Everything is stored on this device only. Export a backup before you switch phones or clear your browser data.</p>' +
+              '<h3>Member list</h3>' +
+              '<p class="hint">Export the member list to share it or keep a copy. Importing replaces the member list on this phone. Rounds and results are not touched.</p>' +
               '<div class="btn-grid">' +
-                '<button type="button" class="btn secondary" data-action="export">Export backup</button>' +
-                '<button type="button" class="btn secondary" data-action="import">Import backup</button>' +
+                '<button type="button" class="btn secondary" data-action="export">Export members</button>' +
+                '<button type="button" class="btn secondary" data-action="import">Import members</button>' +
               '</div>' +
             '</section>' +
           '</div>' +
@@ -1402,6 +1415,11 @@
       case 'save-result': saveResult(parseInt(el.getAttribute('data-r'), 10), parseInt(el.getAttribute('data-c'), 10)); break;
       case 'stand-view': S.standView = el.getAttribute('data-v'); save(); renderStandings(); break;
       case 'rank-by': S.rankBy = el.getAttribute('data-v'); save(); renderStandings(); break;
+      case 'scoring':
+        S.scoring = el.getAttribute('data-v') === 'draw' ? 'draw' : 'win2';
+        ui.errorCourt = -1;
+        save(); renderSetup(); renderMain();
+        break;
       case 'remove-member': if (S.members[i] != null) removeMember(S.members[i]); break;
       case 'export': exportData(); break;
       case 'import': $('importFile').click(); break;
@@ -1461,17 +1479,6 @@
   if (location.hash === '#settings') openSettings();
   if (firstRun) {
     save();
-    // First launch: try to take the member list from the old Google Sheet once.
-    fetchSheetNames().then(function (names) {
-      if (S.membersEdited || S.t) return;
-      var fromSheet = normalize({ members: names });
-      if (!fromSheet) return;
-      S.members = fromSheet.members;
-      S.selected = fromSheet.members.slice();
-      S.locked = [];
-      save(); render(); renderMemberList();
-      toast('Loaded ' + S.members.length + ' club members from the Google Sheet.');
-    }).catch(function () { /* offline or blocked: keep the default list */ });
   }
 
   // Ask the browser to keep our data even when the device is low on space.
