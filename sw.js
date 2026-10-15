@@ -1,6 +1,6 @@
 // Pickleball Tournament service worker: makes the app work offline.
 // Bump VERSION whenever you upload a changed index.html, so phones pick it up.
-const VERSION = 'pickleball-v7';
+const VERSION = 'pickleball-v9';
 const APP_FILES = [
   './',
   './index.html',

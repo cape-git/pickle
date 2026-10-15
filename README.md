@@ -22,5 +22,5 @@ Importing replaces the member list on that phone. Rounds, results and settings a
 
 ## Updating
 
-When you change `index.html`, also change `VERSION` in `sw.js` (e.g. `pickleball-v8`)
+When you change `index.html`, also change `VERSION` in `sw.js` (e.g. `pickleball-v10`)
 so installed copies pick up the new version.

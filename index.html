@@ -606,6 +606,19 @@
   function activeLockedPairs(players) {
     return S.locked.filter(function (p) { return contains(players, p[0]) && contains(players, p[1]); });
   }
+  // A locked team only counts in the team comparison if the two players were
+  // partners (or sat out together) in every submitted round of this tournament.
+  // Teams locked, unlocked or changed mid-tournament are ranked as players only.
+  function keptTogether(p) {
+    return S.t.rounds.every(function (r) {
+      if (contains(r.bench, p[0]) || contains(r.bench, p[1])) return contains(r.bench, p[0]) && contains(r.bench, p[1]);
+      return r.courts.some(function (c) {
+        return c.teams.some(function (tm) { return contains(tm, p[0]) && contains(tm, p[1]); });
+      });
+    });
+  }
+  function comparableTeams() { return S.t ? activeLockedPairs(S.t.players).filter(keptTogether) : []; }
+  function changedTeams() { return S.t ? activeLockedPairs(S.t.players).filter(function (p) { return !keptTogether(p); }) : []; }
 
   function makeRound() {
     var t = S.t;
@@ -771,24 +784,31 @@
     toast('Round ' + round.n + ', court ' + (c + 1) + ' updated.');
   }
 
-  function lockPool() { return S.t ? S.t.players : selectedPlayers(); }
-  function markLocksChanged() { if (S.t && S.t.current) S.t.locksChanged = true; }
+  // Locked teams are always picked from the players ticked under "Players today".
+  function lockPool() { return selectedPlayers(); }
+  // Only offer "Redraw this round" when the change touches the running tournament.
+  function markLocksChanged(pair) {
+    if (!S.t || !S.t.current) return;
+    if (pair && !(contains(S.t.players, pair[0]) && contains(S.t.players, pair[1]))) return;
+    S.t.locksChanged = true;
+  }
 
   function pickLock(p) {
     if (ui.lockPending === null) ui.lockPending = p;
     else if (ui.lockPending === p) ui.lockPending = null;
     else {
-      S.locked.push([ui.lockPending, p]);
+      var pair = [ui.lockPending, p];
+      S.locked.push(pair);
       ui.lockPending = null;
-      markLocksChanged();
+      markLocksChanged(pair);
       save();
     }
     render();
   }
   function unlock(i) {
-    S.locked.splice(i, 1);
+    var pair = S.locked.splice(i, 1)[0];
     ui.lockPending = null;
-    markLocksChanged();
+    if (pair) markLocksChanged(pair);
     save(); render();
   }
 
@@ -918,7 +938,7 @@
     var t = S.t, st = stats(), rows = [];
     var blank = { pf: 0, pa: 0, wins: 0, draws: 0, losses: 0, bench: 0, form: [], pts: 0, diff: 0 };
     if (view === 'teams') {
-      activeLockedPairs(t.players).forEach(function (p) { rows.push({ label: joinTeam(p), s: st[p[0]] || blank }); });
+      comparableTeams().forEach(function (p) { rows.push({ label: joinTeam(p), s: st[p[0]] || blank }); });
     } else {
       t.players.forEach(function (p) { rows.push({ label: p, s: st[p] || blank }); });
     }
@@ -1001,7 +1021,7 @@
 
     if (withStandings) {
       standingsTable('individual', 'Standings');
-      if (activeLockedPairs(t.players).length) standingsTable('teams', 'Locked teams');
+      if (comparableTeams().length) standingsTable('teams', 'Locked teams');
     }
 
     if (withResults) {
@@ -1060,7 +1080,7 @@
           '<p>Choose what to include. The file is A4 and ready to print or send.</p>' +
           '<div class="check-list">' +
             '<label class="check-row" for="pdfStandings"><input type="checkbox" id="pdfStandings"' + (preset === 'standings' ? ' checked' : '') + '>' +
-              '<span><b>Standings</b><small>Points, wins, draws, losses, +/-, bench turns and form for every player' + (activeLockedPairs(S.t.players).length ? ', plus locked teams' : '') + '.</small></span></label>' +
+              '<span><b>Standings</b><small>Points, wins, draws, losses, +/-, bench turns and form for every player' + (comparableTeams().length ? ', plus locked teams' : '') + '.</small></span></label>' +
             '<label class="check-row" for="pdfResults"><input type="checkbox" id="pdfResults"' + (preset === 'results' ? ' checked' : '') + '>' +
               '<span><b>Results</b><small>Every submitted round: courts, teams, scores and who sat out (' + S.t.rounds.length + (S.t.rounds.length === 1 ? ' round' : ' rounds') + ').</small></span></label>' +
           '</div>' +
@@ -1221,6 +1241,7 @@
               '<div class="chips">' + pairsHtml + '</div>' +
               '<p class="hint">' + lockHint + '</p>' +
               '<div class="chips">' + pickHtml + '</div>' +
+              (selChanged ? '<p class="hint">Locked teams with players who are not in the running tournament apply when you start a new tournament.</p>' : '') +
             '</div>'
           : '') +
       '</section>' +
@@ -1320,7 +1341,12 @@
       var cells = cols.map(function (c, k) { return '<td' + (k === 0 ? ' class="key"' : '') + '>' + c.v(r.s) + '</td>'; }).join('');
       var form = r.s.form.slice(-8).map(function (x) { return '<span class="' + x.toLowerCase() + '">' + x + '</span>'; }).join('');
       return '<tr><td class="rank">' + (i + 1) + '</td><td class="name">' + esc(r.label) + '</td>' + cells + '<td>' + r.s.bench + '</td><td class="form">' + (form || '–') + '</td></tr>';
-    }).join('') : '<tr><td colspan="' + (cols.length + 4) + '" class="name" style="color:var(--muted)">No locked teams are playing in this tournament.</td></tr>';
+    }).join('') : '<tr><td colspan="' + (cols.length + 4) + '" class="name" style="color:var(--muted)">' + (changedTeams().length ? 'No locked team has played together for the whole tournament.' : 'No locked teams are playing in this tournament.') + '</td></tr>';
+    var changed = S.standView === 'teams' ? changedTeams() : [];
+    var changedNote = changed.length
+      ? '<p class="hint standings-note">Not in the team comparison: ' + esc(changed.map(joinTeam).join(', ')) +
+        '. ' + (changed.length === 1 ? 'This team was' : 'These teams were') + ' changed during the tournament, so the players are only ranked individually.</p>'
+      : '';
     var rb = function (v, label) { return '<button type="button" data-action="rank-by" data-v="' + v + '" aria-pressed="' + (by === v) + '">' + label + '</button>'; };
 
     el.innerHTML = '<section class="standings"><div class="section-row"><h2>Standings</h2><button type="button" class="mini-btn" data-action="pdf" data-preset="standings">' + ICON_PDF + 'PDF</button></div>' +
@@ -1329,6 +1355,7 @@
         '<div class="seg seg3" role="group" aria-label="Rank by">' + rb('diff', '+/-') + rb('points', 'Points') + rb('record', 'Wins') + '</div>' +
       '</div>' +
       '<div class="table-wrap"><table><thead><tr><th>#</th><th class="name">' + (S.standView === 'teams' ? 'Team' : 'Player') + '</th>' + head + '<th>Bench</th><th>Form</th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+      changedNote +
       '<p class="hint standings-note">Points: win 2, draw 1, loss 0. +/- is score for minus score against.</p></section>';
   }
 
