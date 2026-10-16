@@ -620,6 +620,56 @@
   function comparableTeams() { return S.t ? activeLockedPairs(S.t.players).filter(keptTogether) : []; }
   function changedTeams() { return S.t ? activeLockedPairs(S.t.players).filter(function (p) { return !keptTogether(p); }) : []; }
 
+  // ── Americano: avoid repeats ────────────────────────────────────────────
+  // Tries many random draws and keeps the one that repeats the least of what
+  // has already happened in this tournament. Cost per repeat, worst first:
+  // the same two teams meeting again, the same partners again, the same four
+  // players on one court again, the same opponents again. Repeats from the
+  // last round count a bit extra, so back-to-back repeats are avoided first.
+  function key2(a, b) { return a < b ? a + '|' + b : b + '|' + a; }
+  function teamKey(tm) { return tm.slice().sort().join('&'); }
+  function matchKey(t1, t2) { return [teamKey(t1), teamKey(t2)].sort().join(' v '); }
+  function quadKey(t1, t2) { return t1.concat(t2).sort().join(','); }
+  function matchHistory(rounds) {
+    var h = { partner: {}, opp: {}, match: {}, quad: {} };
+    var add = function (m, k, w) { m[k] = (m[k] || 0) + w; };
+    rounds.forEach(function (r, ri) {
+      var w = ri === rounds.length - 1 ? 1.5 : 1;   // the round just played weighs more
+      r.courts.forEach(function (c) {
+        var a = c.teams[0], b = c.teams[1];
+        add(h.partner, key2(a[0], a[1]), w); add(h.partner, key2(b[0], b[1]), w);
+        a.forEach(function (x) { b.forEach(function (y) { add(h.opp, key2(x, y), w); }); });
+        add(h.match, matchKey(a, b), w);
+        add(h.quad, quadKey(a, b), w);
+      });
+    });
+    return h;
+  }
+  function drawCost(teams, h) {
+    var cost = 0, i, k;
+    for (i = 0; i < teams.length; i++) {
+      k = h.partner[key2(teams[i][0], teams[i][1])] || 0;
+      cost += 100 * k * k;
+    }
+    for (i = 0; i + 1 < teams.length; i += 2) {
+      var a = teams[i], b = teams[i + 1];
+      k = h.match[matchKey(a, b)] || 0; cost += 1000 * k * k;
+      k = h.quad[quadKey(a, b)] || 0;   cost += 30 * k * k;
+      a.forEach(function (x) { b.forEach(function (y) { var o = h.opp[key2(x, y)] || 0; cost += 10 * o * o; }); });
+    }
+    return cost;
+  }
+  function leastRepeatedDraw(randomTeams, rounds) {
+    var h = matchHistory(rounds);
+    var best = null, bestCost = Infinity;
+    for (var tries = 0; tries < 2000 && bestCost > 0; tries++) {
+      var teams = shuffle(randomTeams());
+      var cost = drawCost(teams, h);
+      if (cost < bestCost) { best = teams; bestCost = cost; }
+    }
+    return best;
+  }
+
   function makeRound() {
     var t = S.t;
     var st = stats();
@@ -663,15 +713,20 @@
     }
 
     var activeFree = free.filter(function (p) { return !contains(bench, p); });
-    var teams = activeLocked.filter(function (p) { return !contains(bench, p[0]); }).map(function (p) { return p.slice(); });
-    var shuffledFree = shuffle(activeFree);
-    for (var i = 0; i + 1 < shuffledFree.length; i += 2) teams.push([shuffledFree[i], shuffledFree[i + 1]]);
+    var lockedTeams = activeLocked.filter(function (p) { return !contains(bench, p[0]); }).map(function (p) { return p.slice(); });
+    var randomTeams = function () {
+      var teams = lockedTeams.map(function (p) { return p.slice(); });
+      var shuffledFree = shuffle(activeFree);
+      for (var i = 0; i + 1 < shuffledFree.length; i += 2) teams.push([shuffledFree[i], shuffledFree[i + 1]]);
+      return teams;
+    };
 
+    var teams;
     var pts = function (p) { return st[p] ? st[p].pf : 0; };
     if (S.mode === 'mexicano') {
-      teams = shuffle(teams).sort(function (a, b) { return (pts(b[0]) + pts(b[1])) - (pts(a[0]) + pts(a[1])); });
+      teams = shuffle(randomTeams()).sort(function (a, b) { return (pts(b[0]) + pts(b[1])) - (pts(a[0]) + pts(a[1])); });
     } else {
-      teams = shuffle(teams);
+      teams = leastRepeatedDraw(randomTeams, t.rounds);
     }
     var courts = [];
     for (var k = 0; k + 1 < teams.length; k += 2) courts.push({ teams: [teams[k], teams[k + 1]], draft: ['', ''] });
@@ -1203,7 +1258,7 @@
             '<button type="button" data-action="mode" data-mode="mexicano" aria-pressed="' + (S.mode === 'mexicano') + '">Mexicano</button>' +
           '</div>' +
           '<p class="hint">' + (S.mode === 'americano'
-            ? 'Random partners and opponents every round.'
+            ? 'New partners and opponents every round, avoiding repeats where possible.'
             : 'Teams with similar total scores play each other.') +
             (t ? ' Applies from the next round.' : '') + '</p>' +
           '<span class="label sub">Scoring</span>' +
